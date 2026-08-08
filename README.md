@@ -58,6 +58,9 @@ Tests live in the `test/` directory and run with `flutter test`.
 ## Todo
 - [ ] add sync
 - [ ] finish readme
+- [ ] add app icon
+- [ ] fix export/import on android
+- [ ] make it so you can select first sunday of the month every 2 months (better schedule system)
 
 
 
