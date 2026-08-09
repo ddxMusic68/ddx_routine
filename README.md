@@ -61,8 +61,11 @@ Tests live in the `test/` directory and run with `flutter test`.
 - [ ] add app icon
 - [ ] fix export/import on android
 - [ ] make it so you can select first sunday of the month every 2 months (better schedule system)
-
-
+- [ ] change name to ddxRoutine
+- [ ] make it so you can add multiple time occurrences for example every other day and Saturday
+- [ ] make it so you can chain similar routine tasks under one schedule (so linked tasks)
+- [ ] make increment buttons easier to use so you don't have to keep incrementing
+- [ ] add borders between tasks when editing
 
 
 ## Changelog
