@@ -6,7 +6,7 @@ import '../models/schedule.dart';
 import '../utils/storage.dart';
 
 class RoutineProvider extends ChangeNotifier {
-  static const _schemaVersion = 4;
+  static const _schemaVersion = 5;
 
   List<Routine> _routines = [];
   final Set<String> _completedKeys = {};
@@ -125,9 +125,11 @@ class RoutineProvider extends ChangeNotifier {
     int minDurationMinutes = 0,
     int maxDurationMinutes = 0,
     String? durationNote,
-    required Schedule schedule,
+    required List<Schedule> schedules,
   }) async {
-    schedule.validate();
+    for (final schedule in schedules) {
+      schedule.validate();
+    }
     final routineIndex = _indexOfRoutine(routineId);
     if (routineIndex < 0) {
       throw ArgumentError('Routine not found: $routineId');
@@ -139,7 +141,7 @@ class RoutineProvider extends ChangeNotifier {
       minDurationMinutes: minDurationMinutes,
       maxDurationMinutes: maxDurationMinutes,
       durationNote: durationNote,
-      schedule: schedule,
+      schedules: schedules,
     );
     final routine = _routines[routineIndex];
     _routines[routineIndex] = routine.copyWith(tasks: [...routine.tasks, task]);
@@ -156,10 +158,12 @@ class RoutineProvider extends ChangeNotifier {
     int? minDurationMinutes,
     int? maxDurationMinutes,
     String? durationNote,
-    Schedule? schedule,
+    List<Schedule>? schedules,
   }) async {
-    final scheduleToValidate = schedule ?? task.schedule;
-    scheduleToValidate.validate();
+    final schedulesToValidate = schedules ?? task.schedules;
+    for (final schedule in schedulesToValidate) {
+      schedule.validate();
+    }
     final routineIndex = _indexOfRoutine(routineId);
     if (routineIndex < 0) {
       throw ArgumentError('Routine not found: $routineId');
@@ -176,7 +180,7 @@ class RoutineProvider extends ChangeNotifier {
       minDurationMinutes: minDurationMinutes,
       maxDurationMinutes: maxDurationMinutes,
       durationNote: durationNote,
-      schedule: schedule,
+      schedules: schedules,
     );
     _routines[routineIndex] = routine.copyWith(tasks: tasks);
     await _save();
@@ -236,7 +240,9 @@ class RoutineProvider extends ChangeNotifier {
       }
       final routine = Routine.fromJson(entry);
       for (final task in routine.tasks) {
-        task.schedule.validate();
+        for (final schedule in task.schedules) {
+          schedule.validate();
+        }
       }
       imported.add(routine);
     }

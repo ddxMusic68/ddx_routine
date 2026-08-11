@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/routine.dart';
 import '../models/schedule.dart';
 import '../models/weekday.dart';
+import '../models/weekday_ordinal.dart';
 import '../providers/routine_provider.dart';
 import '../widgets/day_of_month_picker.dart';
 import '../widgets/weekday_selector.dart';
@@ -27,14 +28,10 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   late final TextEditingController _descriptionController;
   late final TextEditingController _durationNoteController;
 
-  late ScheduleFrequency _frequency;
-  late Set<Weekday> _selectedDays;
-  late int _interval;
-  late int _month;
+  late List<_ScheduleDraft> _drafts;
+  int? _expandedIndex;
   late int _minDuration;
   late int _maxDuration;
-  int? _dayOfMonth;
-  String? _scheduleError;
 
   bool get _isEditing => widget.task != null;
 
@@ -42,7 +39,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   void initState() {
     super.initState();
     final task = widget.task;
-    final schedule = task?.schedule;
+    final schedules = task?.schedules;
     _titleController = TextEditingController(text: task?.title ?? '');
     _descriptionController = TextEditingController(
       text: task?.description ?? '',
@@ -50,11 +47,9 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     _durationNoteController = TextEditingController(
       text: task?.durationNote ?? '',
     );
-    _frequency = schedule?.frequency ?? ScheduleFrequency.weekly;
-    _selectedDays = schedule?.days.toSet() ?? <Weekday>{};
-    _interval = schedule?.interval ?? 1;
-    _month = schedule?.month ?? DateTime.now().month;
-    _dayOfMonth = schedule?.dayOfMonth;
+    _drafts = schedules == null || schedules.isEmpty
+        ? [_ScheduleDraft()]
+        : [for (final s in schedules) _ScheduleDraft.fromSchedule(s)];
     _minDuration = task?.minDurationMinutes ?? 0;
     _maxDuration = task?.maxDurationMinutes ?? 0;
   }
@@ -122,52 +117,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
             const SizedBox(height: 24),
             Text('Repeats', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            RadioGroup<ScheduleFrequency>(
-              groupValue: _frequency,
-              onChanged: _setFrequency,
-              child: Column(
-                children: [
-                  RadioListTile<ScheduleFrequency>(
-                    value: ScheduleFrequency.daily,
-                    title: const Text('Daily'),
-                    secondary: const Icon(Icons.event_repeat),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
-                  RadioListTile<ScheduleFrequency>(
-                    value: ScheduleFrequency.weekly,
-                    title: const Text('Weekly'),
-                    secondary: const Icon(Icons.date_range),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
-                  RadioListTile<ScheduleFrequency>(
-                    value: ScheduleFrequency.monthly,
-                    title: const Text('Monthly'),
-                    secondary: const Icon(Icons.calendar_month),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
-                  RadioListTile<ScheduleFrequency>(
-                    value: ScheduleFrequency.yearly,
-                    title: const Text('Yearly'),
-                    secondary: const Icon(Icons.event),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            _buildScheduleFields(),
-            if (_scheduleError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _scheduleError!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
+            _buildScheduleCards(),
           ],
         ),
       ),
@@ -179,26 +129,155 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     );
   }
 
-  void _setFrequency(ScheduleFrequency? value) {
-    if (value == null) return;
+  Widget _buildScheduleCards() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < _drafts.length; i++) _buildScheduleCard(i),
+        const SizedBox(height: 4),
+        OutlinedButton.icon(
+          onPressed: _addSchedule,
+          icon: const Icon(Icons.add),
+          label: const Text('Add schedule'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScheduleCard(int index) {
+    final expanded = _expandedIndex == index;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: expanded
+          ? _buildExpandedScheduleCard(index)
+          : _buildCollapsedScheduleChip(index),
+    );
+  }
+
+  Widget _buildCollapsedScheduleChip(int index) {
+    final draft = _drafts[index];
+    return ListTile(
+      leading: const Icon(Icons.schedule),
+      title: Text(draft.summaryLabel),
+      trailing: const Icon(Icons.expand_more),
+      onTap: () {
+        setState(() {
+          _expandedIndex = index;
+          draft.error = null;
+        });
+      },
+    );
+  }
+
+  Widget _buildExpandedScheduleCard(int index) {
+    final draft = _drafts[index];
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<ScheduleFrequency>(
+            initialValue: draft.frequency,
+            decoration: const InputDecoration(labelText: 'Repeats'),
+            items: [
+              for (final frequency in ScheduleFrequency.values)
+                DropdownMenuItem(
+                  value: frequency,
+                  child: Text(_frequencyLabel(frequency)),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() {
+                  draft.frequency = value;
+                  draft.error = null;
+                });
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildScheduleFields(draft),
+          if (draft.error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                draft.error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: _drafts.length > 1
+                    ? () => _deleteSchedule(index)
+                    : null,
+                child: const Text('Delete'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonal(
+                onPressed: () => _collapseSchedule(index),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _collapseSchedule(int index) {
+    final draft = _drafts[index];
+    final schedule = draft.toSchedule();
+    try {
+      schedule.validate();
+    } on ArgumentError catch (e) {
+      setState(() {
+        draft.error = e.message;
+        _expandedIndex = index;
+      });
+      return;
+    }
     setState(() {
-      _frequency = value;
-      _scheduleError = null;
+      draft.error = null;
+      _expandedIndex = null;
     });
   }
 
-  Widget _buildScheduleFields() {
-    switch (_frequency) {
+  void _deleteSchedule(int index) {
+    if (_drafts.length <= 1) return;
+    setState(() {
+      _drafts.removeAt(index);
+      final expanded = _expandedIndex;
+      if (expanded == null) return;
+      if (expanded == index) {
+        _expandedIndex = null;
+      } else if (expanded > index) {
+        _expandedIndex = expanded - 1;
+      }
+    });
+  }
+
+  void _addSchedule() {
+    setState(() {
+      _drafts.add(_ScheduleDraft());
+      _expandedIndex = _drafts.length - 1;
+    });
+  }
+
+  Widget _buildScheduleFields(_ScheduleDraft draft) {
+    switch (draft.frequency) {
       case ScheduleFrequency.daily:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _IntervalField(
               label: 'day(s)',
-              value: _interval,
+              value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => _interval = value),
+              onChanged: (value) => setState(() => draft.interval = value),
             ),
           ],
         );
@@ -207,21 +286,21 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             WeekdaySelector(
-              selectedDays: _selectedDays,
+              selectedDays: draft.selectedDays,
               onChanged: (days) {
                 setState(() {
-                  _selectedDays = days;
-                  _scheduleError = null;
+                  draft.selectedDays = days;
+                  draft.error = null;
                 });
               },
             ),
             const SizedBox(height: 16),
             _IntervalField(
               label: 'every week(s)',
-              value: _interval,
+              value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => _interval = value),
+              onChanged: (value) => setState(() => draft.interval = value),
             ),
           ],
         );
@@ -229,22 +308,16 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DayOfMonthPicker(
-              selectedDay: _dayOfMonth,
-              onChanged: (day) {
-                setState(() {
-                  _dayOfMonth = day;
-                  _scheduleError = null;
-                });
-              },
-            ),
+            _buildMonthModeToggle(draft),
+            const SizedBox(height: 16),
+            _buildMonthModePicker(draft),
             const SizedBox(height: 16),
             _IntervalField(
               label: 'month(s)',
-              value: _interval,
+              value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => _interval = value),
+              onChanged: (value) => setState(() => draft.interval = value),
             ),
           ],
         );
@@ -253,7 +326,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DropdownButtonFormField<int>(
-              initialValue: _month,
+              initialValue: draft.month,
               decoration: const InputDecoration(labelText: 'Month'),
               items: [
                 for (var m = 1; m <= 12; m++)
@@ -265,54 +338,98 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
               onChanged: (value) {
                 if (value != null) {
                   setState(() {
-                    _month = value;
-                    _scheduleError = null;
+                    draft.month = value;
+                    draft.error = null;
                   });
                 }
               },
             ),
             const SizedBox(height: 16),
-            DayOfMonthPicker(
-              selectedDay: _dayOfMonth,
-              onChanged: (day) {
-                setState(() {
-                  _dayOfMonth = day;
-                  _scheduleError = null;
-                });
-              },
-            ),
+            _buildMonthModeToggle(draft),
+            const SizedBox(height: 16),
+            _buildMonthModePicker(draft),
             const SizedBox(height: 16),
             _IntervalField(
               label: 'year(s)',
-              value: _interval,
+              value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => _interval = value),
+              onChanged: (value) => setState(() => draft.interval = value),
             ),
           ],
         );
     }
   }
 
+  Widget _buildMonthModeToggle(_ScheduleDraft draft) {
+    return SegmentedButton<bool>(
+      segments: const [
+        ButtonSegment(value: false, label: Text('Day of month')),
+        ButtonSegment(value: true, label: Text('Nth weekday')),
+      ],
+      selected: {draft.useWeekdayOfMonth},
+      showSelectedIcon: false,
+      onSelectionChanged: (selection) {
+        setState(() {
+          draft.useWeekdayOfMonth = selection.first;
+          if (draft.useWeekdayOfMonth) {
+            draft.weekdayOfMonth ??= Weekday.sunday;
+            draft.weekdayOrdinal ??= WeekdayOrdinal.first;
+          } else {
+            draft.dayOfMonth ??= DateTime.now().day;
+          }
+          draft.error = null;
+        });
+      },
+    );
+  }
+
+  Widget _buildMonthModePicker(_ScheduleDraft draft) {
+    if (!draft.useWeekdayOfMonth) {
+      return DayOfMonthPicker(
+        selectedDay: draft.dayOfMonth,
+        onChanged: (day) {
+          setState(() {
+            draft.dayOfMonth = day;
+            draft.error = null;
+          });
+        },
+      );
+    }
+    return _WeekdayOfMonthFields(
+      ordinal: draft.weekdayOrdinal,
+      weekday: draft.weekdayOfMonth,
+      onOrdinalChanged: (value) {
+        setState(() {
+          draft.weekdayOrdinal = value;
+          draft.error = null;
+        });
+      },
+      onWeekdayChanged: (value) {
+        setState(() {
+          draft.weekdayOfMonth = value;
+          draft.error = null;
+        });
+      },
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    final schedule = Schedule(
-      frequency: _frequency,
-      interval: _interval,
-      anchor: _interval > 1 ? DateTime.now() : null,
-      days: _frequency == ScheduleFrequency.weekly ? _selectedDays : {},
-      dayOfMonth:
-          _frequency == ScheduleFrequency.monthly ||
-              _frequency == ScheduleFrequency.yearly
-          ? _dayOfMonth
-          : null,
-      month: _frequency == ScheduleFrequency.yearly ? _month : null,
-    );
-    try {
-      schedule.validate();
-    } on ArgumentError catch (e) {
-      setState(() => _scheduleError = e.message);
-      return;
+    final schedules = <Schedule>[];
+    for (var i = 0; i < _drafts.length; i++) {
+      final draft = _drafts[i];
+      final schedule = draft.toSchedule();
+      try {
+        schedule.validate();
+      } on ArgumentError catch (e) {
+        setState(() {
+          _expandedIndex = i;
+          draft.error = e.message;
+        });
+        return;
+      }
+      schedules.add(schedule);
     }
 
     final title = _titleController.text.trim();
@@ -328,7 +445,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         minDurationMinutes: _minDuration,
         maxDurationMinutes: _maxDuration,
         durationNote: durationNote.isEmpty ? null : durationNote,
-        schedule: schedule,
+        schedules: schedules,
       );
     } else {
       await provider.addTask(
@@ -338,17 +455,89 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         minDurationMinutes: _minDuration,
         maxDurationMinutes: _maxDuration,
         durationNote: durationNote.isEmpty ? null : durationNote,
-        schedule: schedule,
+        schedules: schedules,
       );
     }
     if (!mounted) return;
     Navigator.pop(context);
   }
 
+  static String _frequencyLabel(ScheduleFrequency frequency) =>
+      switch (frequency) {
+        ScheduleFrequency.daily => 'Daily',
+        ScheduleFrequency.weekly => 'Weekly',
+        ScheduleFrequency.monthly => 'Monthly',
+        ScheduleFrequency.yearly => 'Yearly',
+      };
+
   static const _monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
   ];
+}
+
+class _ScheduleDraft {
+  ScheduleFrequency frequency;
+  Set<Weekday> selectedDays;
+  int interval;
+  int month;
+  int? dayOfMonth;
+  Weekday? weekdayOfMonth;
+  WeekdayOrdinal? weekdayOrdinal;
+  bool useWeekdayOfMonth;
+  String? error;
+
+  _ScheduleDraft({
+    this.frequency = ScheduleFrequency.weekly,
+    Set<Weekday>? selectedDays,
+    this.interval = 1,
+    int? month,
+    this.dayOfMonth,
+    this.weekdayOfMonth,
+    this.weekdayOrdinal,
+    this.useWeekdayOfMonth = false,
+  })  : selectedDays = selectedDays ?? <Weekday>{},
+        month = month ?? DateTime.now().month;
+
+  factory _ScheduleDraft.fromSchedule(Schedule schedule) {
+    return _ScheduleDraft(
+      frequency: schedule.frequency,
+      selectedDays: schedule.days.toSet(),
+      interval: schedule.interval,
+      month: schedule.month ?? DateTime.now().month,
+      dayOfMonth: schedule.dayOfMonth,
+      weekdayOfMonth: schedule.weekdayOfMonth,
+      weekdayOrdinal: schedule.weekdayOrdinal,
+      useWeekdayOfMonth: schedule.usesWeekdayOfMonth,
+    );
+  }
+
+  Schedule toSchedule() {
+    final usesDayOrWeekday = frequency == ScheduleFrequency.monthly ||
+        frequency == ScheduleFrequency.yearly;
+    return Schedule(
+      frequency: frequency,
+      interval: interval,
+      anchor: interval > 1 ? DateTime.now() : null,
+      days: frequency == ScheduleFrequency.weekly ? selectedDays : {},
+      dayOfMonth: usesDayOrWeekday && !useWeekdayOfMonth ? dayOfMonth : null,
+      month: frequency == ScheduleFrequency.yearly ? month : null,
+      weekdayOfMonth:
+          usesDayOrWeekday && useWeekdayOfMonth ? weekdayOfMonth : null,
+      weekdayOrdinal:
+          usesDayOrWeekday && useWeekdayOfMonth ? weekdayOrdinal : null,
+    );
+  }
+
+  String get summaryLabel {
+    final schedule = toSchedule();
+    try {
+      schedule.validate();
+      return schedule.summary;
+    } on ArgumentError {
+      return 'Tap to configure';
+    }
+  }
 }
 
 class _DurationField extends StatelessWidget {
@@ -415,6 +604,55 @@ class _DurationField extends StatelessWidget {
           child: Text(
             'min',
             style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WeekdayOfMonthFields extends StatelessWidget {
+  final WeekdayOrdinal? ordinal;
+  final Weekday? weekday;
+  final ValueChanged<WeekdayOrdinal> onOrdinalChanged;
+  final ValueChanged<Weekday> onWeekdayChanged;
+
+  const _WeekdayOfMonthFields({
+    required this.ordinal,
+    required this.weekday,
+    required this.onOrdinalChanged,
+    required this.onWeekdayChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<WeekdayOrdinal>(
+            initialValue: ordinal,
+            decoration: const InputDecoration(labelText: 'Occurrence'),
+            items: [
+              for (final value in WeekdayOrdinal.values)
+                DropdownMenuItem(value: value, child: Text(value.label)),
+            ],
+            onChanged: (value) {
+              if (value != null) onOrdinalChanged(value);
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: DropdownButtonFormField<Weekday>(
+            initialValue: weekday,
+            decoration: const InputDecoration(labelText: 'Weekday'),
+            items: [
+              for (final value in Weekday.values)
+                DropdownMenuItem(value: value, child: Text(value.label)),
+            ],
+            onChanged: (value) {
+              if (value != null) onWeekdayChanged(value);
+            },
           ),
         ),
       ],

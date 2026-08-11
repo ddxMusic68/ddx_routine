@@ -8,7 +8,7 @@ class RoutineTask {
   final int minDurationMinutes;
   final int maxDurationMinutes;
   final String? durationNote;
-  final Schedule schedule;
+  final List<Schedule> schedules;
 
   const RoutineTask({
     required this.id,
@@ -17,8 +17,17 @@ class RoutineTask {
     this.minDurationMinutes = 0,
     this.maxDurationMinutes = 0,
     this.durationNote,
-    required this.schedule,
+    required this.schedules,
   });
+
+  bool occursOn(DateTime date) =>
+      schedules.any((schedule) => schedule.occursOn(date));
+
+  String? get scheduleSummary {
+    final summaries = schedules.map((s) => s.summary).toList();
+    if (summaries.isEmpty) return null;
+    return summaries.join(' · ');
+  }
 
   Duration get duration =>
       Duration(minutes: maxDurationMinutes > minDurationMinutes
@@ -45,7 +54,7 @@ class RoutineTask {
     int? minDurationMinutes,
     int? maxDurationMinutes,
     String? durationNote,
-    Schedule? schedule,
+    List<Schedule>? schedules,
   }) {
     return RoutineTask(
       id: id,
@@ -56,22 +65,34 @@ class RoutineTask {
       maxDurationMinutes:
           maxDurationMinutes ?? this.maxDurationMinutes,
       durationNote: durationNote ?? this.durationNote,
-      schedule: schedule ?? this.schedule,
+      schedules: schedules ?? this.schedules,
     );
   }
 
   factory RoutineTask.fromJson(Map<String, dynamic> json) {
-    final schedule = json['schedule'] != null
-        ? Schedule.fromJson(json['schedule'] as Map<String, dynamic>)
-        : Schedule(
-            frequency: ScheduleFrequency.weekly,
-            days: (json['days'] as List<dynamic>? ?? const [])
-                .map((e) => Weekday.values.firstWhere(
-                      (w) => w.name == e,
-                      orElse: () => Weekday.monday,
-                    ))
-                .toSet(),
-          );
+    final schedulesRaw = json['schedules'];
+    List<Schedule> schedules;
+    if (schedulesRaw is List) {
+      schedules = schedulesRaw
+          .map((e) => Schedule.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } else if (json['schedule'] != null) {
+      schedules = [
+        Schedule.fromJson(json['schedule'] as Map<String, dynamic>),
+      ];
+    } else {
+      schedules = [
+        Schedule(
+          frequency: ScheduleFrequency.weekly,
+          days: (json['days'] as List<dynamic>? ?? const [])
+              .map((e) => Weekday.values.firstWhere(
+                    (w) => w.name == e,
+                    orElse: () => Weekday.monday,
+                  ))
+              .toSet(),
+        ),
+      ];
+    }
     return RoutineTask(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -83,7 +104,7 @@ class RoutineTask {
           json['durationMinutes'] as int? ??
           0,
       durationNote: json['durationNote'] as String?,
-      schedule: schedule,
+      schedules: schedules,
     );
   }
 
@@ -95,7 +116,7 @@ class RoutineTask {
       'minDurationMinutes': minDurationMinutes,
       'maxDurationMinutes': maxDurationMinutes,
       'durationNote': durationNote,
-      'schedule': schedule.toJson(),
+      'schedules': schedules.map((s) => s.toJson()).toList(),
     };
   }
 }
@@ -119,7 +140,7 @@ class Routine {
   int taskCountOn(DateTime date) => tasksOn(date).length;
 
   List<RoutineTask> tasksOn(DateTime date) =>
-      tasks.where((task) => task.schedule.occursOn(date)).toList();
+      tasks.where((task) => task.occursOn(date)).toList();
 
   Routine copyWith({String? name, List<RoutineTask>? tasks}) {
     return Routine(

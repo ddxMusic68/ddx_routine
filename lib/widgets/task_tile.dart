@@ -49,12 +49,13 @@ class TaskTile extends StatelessWidget {
           if (task.description != null && task.description!.isNotEmpty)
             Text(task.description!),
           const SizedBox(height: 4),
-          Text(
-            task.schedule.summary,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          if (task.scheduleSummary != null)
+            Text(
+              task.scheduleSummary!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
         ],
       ),
       trailing: Row(

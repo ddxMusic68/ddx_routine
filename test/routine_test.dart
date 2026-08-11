@@ -9,10 +9,12 @@ void main() {
       return RoutineTask(
         id: id,
         title: title,
-        schedule: Schedule(
-          frequency: ScheduleFrequency.weekly,
-          days: days,
-        ),
+        schedules: [
+          Schedule(
+            frequency: ScheduleFrequency.weekly,
+            days: days,
+          ),
+        ],
       );
     }
 
@@ -66,9 +68,11 @@ void main() {
         minDurationMinutes: min,
         maxDurationMinutes: max,
         durationNote: note,
-        schedule: Schedule(
-          frequency: ScheduleFrequency.daily,
-        ),
+        schedules: [
+          Schedule(
+            frequency: ScheduleFrequency.daily,
+          ),
+        ],
       );
     }
 
@@ -109,9 +113,11 @@ void main() {
         minDurationMinutes: 20,
         maxDurationMinutes: 45,
         durationNote: 'light day',
-        schedule: Schedule(
-          frequency: ScheduleFrequency.daily,
-        ),
+        schedules: [
+          Schedule(
+            frequency: ScheduleFrequency.daily,
+          ),
+        ],
       );
       final restored = RoutineTask.fromJson(task.toJson());
       expect(restored.minDurationMinutes, 20);
@@ -131,6 +137,61 @@ void main() {
       expect(restored.minDurationMinutes, 30);
       expect(restored.maxDurationMinutes, 30);
       expect(restored.durationNote, isNull);
+    });
+  });
+
+  group('RoutineTask multiple schedules', () {
+    RoutineTask task() {
+      return RoutineTask(
+        id: 't1',
+        title: 'Stretch',
+        schedules: [
+          Schedule(
+            frequency: ScheduleFrequency.daily,
+            interval: 2,
+            anchor: DateTime(2026, 8, 10),
+          ),
+          Schedule(
+            frequency: ScheduleFrequency.weekly,
+            days: {Weekday.saturday},
+          ),
+        ],
+      );
+    }
+
+    test('occursOn is true when any schedule matches', () {
+      final t = task();
+      expect(t.occursOn(DateTime(2026, 8, 8)), isTrue); // Saturday rule
+      expect(t.occursOn(DateTime(2026, 8, 10)), isTrue); // every-other-day
+      expect(t.occursOn(DateTime(2026, 8, 12)), isTrue); // every-other-day
+      expect(t.occursOn(DateTime(2026, 8, 15)), isTrue); // Saturday rule
+      expect(t.occursOn(DateTime(2026, 8, 9)), isFalse);
+      expect(t.occursOn(DateTime(2026, 8, 11)), isFalse);
+    });
+
+    test('scheduleSummary joins all schedule summaries', () {
+      expect(task().scheduleSummary, 'Every 2 days · Sat');
+    });
+
+    test('JSON round-trips multiple schedules', () {
+      final restored = RoutineTask.fromJson(task().toJson());
+      expect(restored.schedules.length, 2);
+      expect(restored.schedules[0].frequency, ScheduleFrequency.daily);
+      expect(restored.schedules[1].frequency, ScheduleFrequency.weekly);
+      expect(restored.occursOn(DateTime(2026, 8, 8)), isTrue);
+      expect(restored.occursOn(DateTime(2026, 8, 12)), isTrue);
+      expect((task().toJson()['schedules'] as List).length, 2);
+    });
+
+    test('legacy single-schedule JSON loads as one schedule', () {
+      final restored = RoutineTask.fromJson({
+        'id': 't1',
+        'title': 'T',
+        'schedule': {'frequency': 'daily'},
+      });
+      expect(restored.schedules.length, 1);
+      expect(restored.schedules.single.frequency, ScheduleFrequency.daily);
+      expect(restored.occursOn(DateTime(2026, 8, 10)), isTrue);
     });
   });
 }

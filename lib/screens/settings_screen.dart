@@ -1,5 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
-import 'package:file_selector/file_selector.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -11,11 +12,6 @@ import 'wip_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
-
-  static const _jsonTypeGroup = XTypeGroup(
-    label: 'JSON',
-    extensions: ['json'],
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -116,14 +112,16 @@ class SettingsScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final provider = context.read<RoutineProvider>();
     try {
-      final location = await getSaveLocation(
-        suggestedName: 'ddx_routine_backup.json',
-        acceptedTypeGroups: const [_jsonTypeGroup],
+      final path = await FilePicker.saveFile(
+        dialogTitle: 'Export data',
+        fileName: 'ddx_routine_backup.json',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        bytes: utf8.encode(provider.exportJson()),
       );
-      if (location == null) return;
-      await File(location.path).writeAsString(provider.exportJson());
+      if (path == null) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Exported to ${location.path}')),
+        SnackBar(content: Text('Exported to $path')),
       );
     } catch (e) {
       messenger.showSnackBar(
@@ -158,11 +156,17 @@ class SettingsScreen extends StatelessWidget {
     );
     if (confirmed != true) return;
     try {
-      final file = await openFile(
-        acceptedTypeGroups: const [_jsonTypeGroup],
+      final result = await FilePicker.pickFiles(
+        dialogTitle: 'Import data',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: true,
       );
-      if (file == null) return;
-      final content = await file.readAsString();
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      final content = file.bytes != null
+          ? utf8.decode(file.bytes!)
+          : await File(file.path!).readAsString();
       await provider.importJson(content);
       messenger.showSnackBar(
         const SnackBar(content: Text('Data imported')),

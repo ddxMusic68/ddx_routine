@@ -1,4 +1,5 @@
 import 'weekday.dart';
+import 'weekday_ordinal.dart';
 
 enum ScheduleFrequency { daily, weekly, monthly, yearly }
 
@@ -9,6 +10,8 @@ class Schedule {
   final Set<Weekday> days;
   final int? dayOfMonth;
   final int? month;
+  final Weekday? weekdayOfMonth;
+  final WeekdayOrdinal? weekdayOrdinal;
 
   const Schedule({
     required this.frequency,
@@ -17,7 +20,11 @@ class Schedule {
     this.days = const {},
     this.dayOfMonth,
     this.month,
+    this.weekdayOfMonth,
+    this.weekdayOrdinal,
   });
+
+  bool get usesWeekdayOfMonth => weekdayOfMonth != null || weekdayOrdinal != null;
 
   bool get isRecurring => interval > 1;
 
@@ -34,7 +41,13 @@ class Schedule {
         }
         break;
       case ScheduleFrequency.monthly:
-        if (dayOfMonth == null || dayOfMonth! < 1 || dayOfMonth! > 31) {
+        if (usesWeekdayOfMonth) {
+          if (weekdayOfMonth == null || weekdayOrdinal == null) {
+            throw ArgumentError(
+              'Monthly schedule requires a weekday and occurrence',
+            );
+          }
+        } else if (dayOfMonth == null || dayOfMonth! < 1 || dayOfMonth! > 31) {
           throw ArgumentError(
             'Monthly schedule requires a day of the month (1-31)',
           );
@@ -44,7 +57,13 @@ class Schedule {
         if (month == null || month! < 1 || month! > 12) {
           throw ArgumentError('Yearly schedule requires a month (1-12)');
         }
-        if (dayOfMonth == null || dayOfMonth! < 1 || dayOfMonth! > 31) {
+        if (usesWeekdayOfMonth) {
+          if (weekdayOfMonth == null || weekdayOrdinal == null) {
+            throw ArgumentError(
+              'Yearly schedule requires a weekday and occurrence',
+            );
+          }
+        } else if (dayOfMonth == null || dayOfMonth! < 1 || dayOfMonth! > 31) {
           throw ArgumentError(
             'Yearly schedule requires a day of the month (1-31)',
           );
@@ -68,7 +87,10 @@ class Schedule {
         if (_mondayOf(d).isBefore(_mondayOf(a))) return false;
         return _weeksSince(a, d) % interval == 0;
       case ScheduleFrequency.monthly:
-        final target = _clampDay(d.year, d.month, dayOfMonth ?? 1);
+        final target = usesWeekdayOfMonth
+            ? _nthWeekdayOfMonth(
+                d.year, d.month, weekdayOfMonth!, weekdayOrdinal!)
+            : _clampDay(d.year, d.month, dayOfMonth ?? 1);
         if (d.day != target) return false;
         if (interval <= 1) return true;
         final a = _anchor();
@@ -77,7 +99,10 @@ class Schedule {
         return monthDiff % interval == 0;
       case ScheduleFrequency.yearly:
         if (d.month != month) return false;
-        final target = _clampDay(d.year, d.month, dayOfMonth ?? 1);
+        final target = usesWeekdayOfMonth
+            ? _nthWeekdayOfMonth(
+                d.year, d.month, weekdayOfMonth!, weekdayOrdinal!)
+            : _clampDay(d.year, d.month, dayOfMonth ?? 1);
         if (d.day != target) return false;
         if (interval <= 1) return true;
         final a = _anchor();
@@ -94,13 +119,25 @@ class Schedule {
         final dayList = days.map((d) => d.label).join(' · ');
         return interval > 1 ? 'Every $interval weeks: $dayList' : dayList;
       case ScheduleFrequency.monthly:
+        if (usesWeekdayOfMonth) {
+          final when = '${weekdayOrdinal!.label} ${weekdayOfMonth!.label}';
+          return interval > 1
+              ? 'Every $interval months on the $when'
+              : 'Monthly on the $when';
+        }
         final day = _ordinal(dayOfMonth ?? 1);
         return interval > 1
             ? 'Every $interval months on the $day'
             : 'Monthly on the $day';
       case ScheduleFrequency.yearly:
-        final day = _ordinal(dayOfMonth ?? 1);
         final name = _monthNames[month == null ? 0 : month! - 1];
+        if (usesWeekdayOfMonth) {
+          final when = '${weekdayOrdinal!.label} ${weekdayOfMonth!.label}';
+          return interval > 1
+              ? 'Every $interval years on the $when of $name'
+              : 'Every year on the $when of $name';
+        }
+        final day = _ordinal(dayOfMonth ?? 1);
         return interval > 1
             ? 'Every $interval years on $name $day'
             : 'Every year on $name $day';
@@ -132,6 +169,18 @@ class Schedule {
           .toSet(),
       dayOfMonth: json['dayOfMonth'] as int?,
       month: json['month'] as int?,
+      weekdayOfMonth: json['weekdayOfMonth'] == null
+          ? null
+          : Weekday.values.firstWhere(
+              (w) => w.name == json['weekdayOfMonth'],
+              orElse: () => Weekday.monday,
+            ),
+      weekdayOrdinal: json['weekdayOrdinal'] == null
+          ? null
+          : WeekdayOrdinal.values.firstWhere(
+              (o) => o.name == json['weekdayOrdinal'],
+              orElse: () => WeekdayOrdinal.first,
+            ),
     );
   }
 
@@ -146,7 +195,15 @@ class Schedule {
         'days': days.map((w) => w.name).toList(),
       if (frequency == ScheduleFrequency.monthly ||
           frequency == ScheduleFrequency.yearly)
-        'dayOfMonth': dayOfMonth,
+        if (usesWeekdayOfMonth)
+          'weekdayOfMonth': weekdayOfMonth!.name,
+      if (frequency == ScheduleFrequency.monthly ||
+          frequency == ScheduleFrequency.yearly)
+        if (usesWeekdayOfMonth)
+          'weekdayOrdinal': weekdayOrdinal!.name,
+      if (frequency == ScheduleFrequency.monthly ||
+          frequency == ScheduleFrequency.yearly)
+        if (!usesWeekdayOfMonth) 'dayOfMonth': dayOfMonth,
       if (frequency == ScheduleFrequency.yearly) 'month': month,
     };
   }
@@ -173,6 +230,22 @@ class Schedule {
   static int _clampDay(int year, int month, int day) {
     final lastDay = DateTime(year, month + 1, 0).day;
     return day > lastDay ? lastDay : day;
+  }
+
+  static int _nthWeekdayOfMonth(
+    int year,
+    int month,
+    Weekday weekday,
+    WeekdayOrdinal ordinal,
+  ) {
+    final weekdayNumber = weekday.index + 1;
+    if (ordinal == WeekdayOrdinal.last) {
+      final last = DateTime(year, month + 1, 0);
+      return last.day - ((last.weekday - weekdayNumber + 7) % 7);
+    }
+    final first = DateTime(year, month, 1);
+    final firstOccurrence = 1 + ((weekdayNumber - first.weekday + 7) % 7);
+    return firstOccurrence + ordinal.index * 7;
   }
 
   static String _dateString(DateTime d) {
