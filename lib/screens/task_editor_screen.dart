@@ -24,14 +24,11 @@ class TaskEditorScreen extends StatefulWidget {
 
 class _TaskEditorScreenState extends State<TaskEditorScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _titleController;
-  late final TextEditingController _descriptionController;
-  late final TextEditingController _durationNoteController;
 
+  late List<_ItemDraft> _itemDrafts;
   late List<_ScheduleDraft> _drafts;
   int? _expandedIndex;
-  late int _minDuration;
-  late int _maxDuration;
+  String? _itemsError;
 
   bool get _isEditing => widget.task != null;
 
@@ -39,26 +36,20 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   void initState() {
     super.initState();
     final task = widget.task;
+    _itemDrafts = task == null || task.items.isEmpty
+        ? [_ItemDraft()]
+        : [for (final item in task.items) _ItemDraft.fromItem(item)];
     final schedules = task?.schedules;
-    _titleController = TextEditingController(text: task?.title ?? '');
-    _descriptionController = TextEditingController(
-      text: task?.description ?? '',
-    );
-    _durationNoteController = TextEditingController(
-      text: task?.durationNote ?? '',
-    );
     _drafts = schedules == null || schedules.isEmpty
         ? [_ScheduleDraft()]
         : [for (final s in schedules) _ScheduleDraft.fromSchedule(s)];
-    _minDuration = task?.minDurationMinutes ?? 0;
-    _maxDuration = task?.maxDurationMinutes ?? 0;
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _durationNoteController.dispose();
+    for (final draft in _itemDrafts) {
+      draft.dispose();
+    }
     super.dispose();
   }
 
@@ -73,47 +64,23 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Title'),
-              textInputAction: TextInputAction.next,
-              validator: (value) => (value == null || value.trim().isEmpty)
-                  ? 'Enter a title'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description (optional)',
-              ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 16),
-            Text('Duration', style: Theme.of(context).textTheme.titleMedium),
+            Text('Items', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            _DurationField(
-              title: 'Min',
-              value: _minDuration,
-              min: 0,
-              max: _maxDuration,
-              onChanged: (value) => setState(() => _minDuration = value),
+            for (var i = 0; i < _itemDrafts.length; i++)
+              _buildItemCard(i),
+            OutlinedButton.icon(
+              onPressed: _addItem,
+              icon: const Icon(Icons.add),
+              label: const Text('Add item'),
             ),
-            const SizedBox(height: 4),
-            _DurationField(
-              title: 'Max',
-              value: _maxDuration,
-              min: _minDuration,
-              max: 1440,
-              onChanged: (value) => setState(() => _maxDuration = value),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _durationNoteController,
-              decoration: const InputDecoration(
-                labelText: 'Duration note (optional)',
+            if (_itemsError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _itemsError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
-            ),
             const SizedBox(height: 24),
             Text('Repeats', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -127,6 +94,88 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         label: Text(_isEditing ? 'Save' : 'Add'),
       ),
     );
+  }
+
+  Widget _buildItemCard(int index) {
+    final draft = _itemDrafts[index];
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: draft.name,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                    textInputAction: TextInputAction.next,
+                    validator: (value) =>
+                        (value == null || value.trim().isEmpty)
+                            ? 'Enter a name'
+                            : null,
+                    onChanged: (_) {
+                      if (_itemsError != null) {
+                        setState(() => _itemsError = null);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Remove item',
+                  onPressed: () => setState(() {
+                    _itemDrafts.removeAt(index);
+                    _itemsError = null;
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: draft.description,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 8),
+            _DurationField(
+              title: 'Min',
+              value: draft.minDuration,
+              min: 0,
+              max: draft.maxDuration,
+              onChanged: (value) => setState(() => draft.minDuration = value),
+            ),
+            const SizedBox(height: 4),
+            _DurationField(
+              title: 'Max',
+              value: draft.maxDuration,
+              min: draft.minDuration,
+              max: 1440,
+              onChanged: (value) => setState(() => draft.maxDuration = value),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: draft.durationNote,
+              decoration: const InputDecoration(
+                labelText: 'Duration note (optional)',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addItem() {
+    setState(() {
+      _itemDrafts.add(_ItemDraft());
+      _itemsError = null;
+    });
   }
 
   Widget _buildScheduleCards() {
@@ -416,6 +465,12 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_itemDrafts.isEmpty) {
+      setState(() => _itemsError = 'Add at least one item.');
+      return;
+    }
+    setState(() => _itemsError = null);
+
     final schedules = <Schedule>[];
     for (var i = 0; i < _drafts.length; i++) {
       final draft = _drafts[i];
@@ -432,30 +487,20 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
       schedules.add(schedule);
     }
 
-    final title = _titleController.text.trim();
-    final description = _descriptionController.text.trim();
-    final durationNote = _durationNoteController.text.trim();
+    final items = [for (final draft in _itemDrafts) draft.toItem()];
     final provider = context.read<RoutineProvider>();
     if (_isEditing) {
       await provider.updateTask(
         widget.routineId,
         widget.task!,
-        title: title,
-        description: description.isEmpty ? null : description,
-        minDurationMinutes: _minDuration,
-        maxDurationMinutes: _maxDuration,
-        durationNote: durationNote.isEmpty ? null : durationNote,
         schedules: schedules,
+        items: items,
       );
     } else {
       await provider.addTask(
         widget.routineId,
-        title,
-        description: description.isEmpty ? null : description,
-        minDurationMinutes: _minDuration,
-        maxDurationMinutes: _maxDuration,
-        durationNote: durationNote.isEmpty ? null : durationNote,
         schedules: schedules,
+        items: items,
       );
     }
     if (!mounted) return;
@@ -474,6 +519,58 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
   ];
+}
+
+class _ItemDraft {
+  final String? existingId;
+  final TextEditingController name;
+  final TextEditingController description;
+  final TextEditingController durationNote;
+  int minDuration;
+  int maxDuration;
+
+  _ItemDraft({
+    this.existingId,
+    String name = '',
+    String description = '',
+    this.minDuration = 0,
+    this.maxDuration = 0,
+    String durationNote = '',
+  })  : name = TextEditingController(text: name),
+        description = TextEditingController(text: description),
+        durationNote = TextEditingController(text: durationNote);
+
+  factory _ItemDraft.fromItem(TaskItem item) {
+    return _ItemDraft(
+      existingId: item.id,
+      name: item.name,
+      description: item.description ?? '',
+      minDuration: item.minDurationMinutes,
+      maxDuration: item.maxDurationMinutes,
+      durationNote: item.durationNote ?? '',
+    );
+  }
+
+  TaskItem toItem() {
+    return TaskItem(
+      id: existingId ?? 'i${DateTime.now().microsecondsSinceEpoch}',
+      name: name.text.trim(),
+      description: description.text.trim().isEmpty
+          ? null
+          : description.text.trim(),
+      minDurationMinutes: minDuration,
+      maxDurationMinutes: maxDuration,
+      durationNote: durationNote.text.trim().isEmpty
+          ? null
+          : durationNote.text.trim(),
+    );
+  }
+
+  void dispose() {
+    name.dispose();
+    description.dispose();
+    durationNote.dispose();
+  }
 }
 
 class _ScheduleDraft {

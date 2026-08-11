@@ -110,13 +110,14 @@ class _DayViewState extends State<DayView> {
                 itemBuilder: (context, index) {
                   final routine = routines[index];
                   final tasks = routine.tasksOn(_selectedDate);
-                  final minMinutes = tasks.fold<int>(
+                  final items = [for (final task in tasks) ...task.items];
+                  final minMinutes = items.fold<int>(
                     0,
-                    (sum, task) => sum + task.minDurationMinutes,
+                    (sum, item) => sum + item.minDurationMinutes,
                   );
-                  final maxMinutes = tasks.fold<int>(
+                  final maxMinutes = items.fold<int>(
                     0,
-                    (sum, task) => sum + task.maxDurationMinutes,
+                    (sum, item) => sum + item.maxDurationMinutes,
                   );
                   final String? durationRange = maxMinutes <= 0
                       ? null
@@ -162,13 +163,15 @@ class _DayViewState extends State<DayView> {
                         for (final task in tasks)
                           TaskTile(
                             task: task,
-                            completed: provider.isTaskCompleted(
+                            isCompleted: (item) => provider.isItemCompleted(
                               task.id,
+                              item.id,
                               _selectedDate,
                             ),
-                            onToggleCompleted: () =>
-                                provider.toggleTaskCompleted(
+                            onToggleCompleted: (item) =>
+                                provider.toggleItemCompleted(
                               task.id,
+                              item.id,
                               _selectedDate,
                             ),
                             onEdit: () => _openEditor(

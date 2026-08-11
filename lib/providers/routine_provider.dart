@@ -6,7 +6,7 @@ import '../models/schedule.dart';
 import '../utils/storage.dart';
 
 class RoutineProvider extends ChangeNotifier {
-  static const _schemaVersion = 5;
+  static const _schemaVersion = 6;
 
   List<Routine> _routines = [];
   final Set<String> _completedKeys = {};
@@ -37,11 +37,15 @@ class RoutineProvider extends ChangeNotifier {
     return tasks;
   }
 
-  bool isTaskCompleted(String taskId, DateTime date) =>
-      _completedKeys.contains(_completionKey(taskId, date));
+  bool isItemCompleted(String taskId, String itemId, DateTime date) =>
+      _completedKeys.contains(_completionKey(taskId, itemId, date));
 
-  Future<void> toggleTaskCompleted(String taskId, DateTime date) async {
-    final key = _completionKey(taskId, date);
+  Future<void> toggleItemCompleted(
+    String taskId,
+    String itemId,
+    DateTime date,
+  ) async {
+    final key = _completionKey(taskId, itemId, date);
     if (_completedKeys.contains(key)) {
       _completedKeys.remove(key);
     } else {
@@ -71,6 +75,9 @@ class RoutineProvider extends ChangeNotifier {
         ..clear()
         ..addAll((json['completions'] as List<dynamic>? ?? const [])
             .cast<String>());
+      if (version < 6) {
+        _migrateCompletionKeysToItems();
+      }
       if (version < _schemaVersion) {
         await _save();
       }
@@ -119,13 +126,9 @@ class RoutineProvider extends ChangeNotifier {
   }
 
   Future<RoutineTask> addTask(
-    String routineId,
-    String title, {
-    String? description,
-    int minDurationMinutes = 0,
-    int maxDurationMinutes = 0,
-    String? durationNote,
-    required List<Schedule> schedules,
+    String routineId, {
+    List<Schedule> schedules = const [],
+    List<TaskItem> items = const [],
   }) async {
     for (final schedule in schedules) {
       schedule.validate();
@@ -136,12 +139,8 @@ class RoutineProvider extends ChangeNotifier {
     }
     final task = RoutineTask(
       id: _newId(),
-      title: title,
-      description: description,
-      minDurationMinutes: minDurationMinutes,
-      maxDurationMinutes: maxDurationMinutes,
-      durationNote: durationNote,
       schedules: schedules,
+      items: items,
     );
     final routine = _routines[routineIndex];
     _routines[routineIndex] = routine.copyWith(tasks: [...routine.tasks, task]);
@@ -153,12 +152,8 @@ class RoutineProvider extends ChangeNotifier {
   Future<void> updateTask(
     String routineId,
     RoutineTask task, {
-    String? title,
-    String? description,
-    int? minDurationMinutes,
-    int? maxDurationMinutes,
-    String? durationNote,
     List<Schedule>? schedules,
+    List<TaskItem>? items,
   }) async {
     final schedulesToValidate = schedules ?? task.schedules;
     for (final schedule in schedulesToValidate) {
@@ -175,12 +170,8 @@ class RoutineProvider extends ChangeNotifier {
     }
     final tasks = [...routine.tasks];
     tasks[taskIndex] = task.copyWith(
-      title: title,
-      description: description,
-      minDurationMinutes: minDurationMinutes,
-      maxDurationMinutes: maxDurationMinutes,
-      durationNote: durationNote,
       schedules: schedules,
+      items: items,
     );
     _routines[routineIndex] = routine.copyWith(tasks: tasks);
     await _save();
@@ -277,8 +268,31 @@ class RoutineProvider extends ChangeNotifier {
 
   int _indexOfRoutine(String id) => _routines.indexWhere((r) => r.id == id);
 
-  static String _completionKey(String taskId, DateTime date) =>
-      '$taskId|${_dateString(date)}';
+  void _migrateCompletionKeysToItems() {
+    final itemIdByTask = <String, String>{};
+    for (final routine in _routines) {
+      for (final task in routine.tasks) {
+        if (task.items.isNotEmpty) {
+          itemIdByTask[task.id] = task.items.first.id;
+        }
+      }
+    }
+    final migrated = <String>{};
+    for (final key in _completedKeys) {
+      final parts = key.split('|');
+      if (parts.length != 2) continue;
+      final taskId = parts[0];
+      final itemId = itemIdByTask[taskId];
+      if (itemId == null) continue;
+      migrated.add('$taskId|$itemId|${parts[1]}');
+    }
+    _completedKeys
+      ..clear()
+      ..addAll(migrated);
+  }
+
+  static String _completionKey(String taskId, String itemId, DateTime date) =>
+      '$taskId|$itemId|${_dateString(date)}';
 
   static String _dateString(DateTime d) {
     final y = d.year.toString().padLeft(4, '0');

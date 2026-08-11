@@ -1,38 +1,22 @@
 import 'schedule.dart';
 import 'weekday.dart';
 
-class RoutineTask {
+class TaskItem {
   final String id;
-  final String title;
+  final String name;
   final String? description;
   final int minDurationMinutes;
   final int maxDurationMinutes;
   final String? durationNote;
-  final List<Schedule> schedules;
 
-  const RoutineTask({
+  const TaskItem({
     required this.id,
-    required this.title,
+    required this.name,
     this.description,
     this.minDurationMinutes = 0,
     this.maxDurationMinutes = 0,
     this.durationNote,
-    required this.schedules,
   });
-
-  bool occursOn(DateTime date) =>
-      schedules.any((schedule) => schedule.occursOn(date));
-
-  String? get scheduleSummary {
-    final summaries = schedules.map((s) => s.summary).toList();
-    if (summaries.isEmpty) return null;
-    return summaries.join(' · ');
-  }
-
-  Duration get duration =>
-      Duration(minutes: maxDurationMinutes > minDurationMinutes
-          ? maxDurationMinutes
-          : minDurationMinutes);
 
   String? get durationLabel {
     final note = durationNote?.trim();
@@ -48,24 +32,80 @@ class RoutineTask {
     return '$base · $note';
   }
 
-  RoutineTask copyWith({
-    String? title,
+  TaskItem copyWith({
+    String? name,
     String? description,
     int? minDurationMinutes,
     int? maxDurationMinutes,
     String? durationNote,
-    List<Schedule>? schedules,
   }) {
-    return RoutineTask(
+    return TaskItem(
       id: id,
-      title: title ?? this.title,
+      name: name ?? this.name,
       description: description ?? this.description,
       minDurationMinutes:
           minDurationMinutes ?? this.minDurationMinutes,
       maxDurationMinutes:
           maxDurationMinutes ?? this.maxDurationMinutes,
       durationNote: durationNote ?? this.durationNote,
+    );
+  }
+
+  factory TaskItem.fromJson(Map<String, dynamic> json) {
+    return TaskItem(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      description: json['description'] as String?,
+      minDurationMinutes: json['minDurationMinutes'] as int? ??
+          json['durationMinutes'] as int? ??
+          0,
+      maxDurationMinutes: json['maxDurationMinutes'] as int? ??
+          json['durationMinutes'] as int? ??
+          0,
+      durationNote: json['durationNote'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'minDurationMinutes': minDurationMinutes,
+      'maxDurationMinutes': maxDurationMinutes,
+      'durationNote': durationNote,
+    };
+  }
+}
+
+class RoutineTask {
+  final String id;
+  final List<Schedule> schedules;
+  final List<TaskItem> items;
+
+  const RoutineTask({
+    required this.id,
+    this.schedules = const [],
+    this.items = const [],
+  });
+
+  bool occursOn(DateTime date) =>
+      schedules.any((schedule) => schedule.occursOn(date));
+
+  String? get scheduleSummary {
+    final summaries = schedules.map((s) => s.summary).toList();
+    if (summaries.isEmpty) return null;
+    return summaries.join(' · ');
+  }
+
+  RoutineTask copyWith({
+    List<Schedule>? schedules,
+    List<TaskItem>? items,
+  }) {
+    return RoutineTask(
+      id: id,
       schedules: schedules ?? this.schedules,
+      items: items ?? this.items,
     );
   }
 
@@ -93,30 +133,42 @@ class RoutineTask {
         ),
       ];
     }
+
+    final itemsRaw = json['items'];
+    List<TaskItem> items;
+    if (itemsRaw is List) {
+      items = itemsRaw
+          .map((e) => TaskItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } else {
+      items = [
+        TaskItem(
+          id: '${json['id']}_i0',
+          name: json['title'] as String? ?? '',
+          description: json['description'] as String?,
+          minDurationMinutes: json['minDurationMinutes'] as int? ??
+              json['durationMinutes'] as int? ??
+              0,
+          maxDurationMinutes: json['maxDurationMinutes'] as int? ??
+              json['durationMinutes'] as int? ??
+              0,
+          durationNote: json['durationNote'] as String?,
+        ),
+      ];
+    }
+
     return RoutineTask(
       id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String?,
-      minDurationMinutes: json['minDurationMinutes'] as int? ??
-          json['durationMinutes'] as int? ??
-          0,
-      maxDurationMinutes: json['maxDurationMinutes'] as int? ??
-          json['durationMinutes'] as int? ??
-          0,
-      durationNote: json['durationNote'] as String?,
       schedules: schedules,
+      items: items,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'title': title,
-      'description': description,
-      'minDurationMinutes': minDurationMinutes,
-      'maxDurationMinutes': maxDurationMinutes,
-      'durationNote': durationNote,
       'schedules': schedules.map((s) => s.toJson()).toList(),
+      'items': items.map((i) => i.toJson()).toList(),
     };
   }
 }
@@ -132,10 +184,13 @@ class Routine {
     this.tasks = const [],
   });
 
-  int get totalDurationMinutes =>
-      tasks.fold(0, (sum, task) => sum + task.maxDurationMinutes);
+  int get totalDurationMinutes => allItems().fold(
+      0, (sum, item) => sum + item.maxDurationMinutes);
 
   int get taskCount => tasks.length;
+
+  List<TaskItem> allItems() =>
+      [for (final task in tasks) ...task.items];
 
   int taskCountOn(DateTime date) => tasksOn(date).length;
 

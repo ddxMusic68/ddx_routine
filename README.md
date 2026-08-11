@@ -63,12 +63,19 @@ Tests live in the `test/` directory and run with `flutter test`.
 - [X] make it so you can select first sunday of the month every 2 months (better schedule system)
 - [ ] change name to ddxRoutine
 - [X] make it so you can add multiple time occurrences for example every other day and Saturday
-- [ ] make it so you can chain similar routine tasks under one schedule (so linked tasks)
+- [X] make it so you can chain similar routine tasks under one schedule (so linked tasks)
 - [ ] make increment buttons easier to use so you don't have to keep incrementing
-- [ ] add borders between tasks when editing
+- [X] add borders between tasks when editing
+- [ ] rework gui to exclude every day above groups
+- [ ] make tasks have an edit menu and not a big widget
+- [ ] make description collapsable
+- [ ] test full app
 
 
 ## Changelog
+### Version 1.1.0
+
+
 ### Version 1.0.0
 - [X] make about the app page
 - [X] make current day say current day
