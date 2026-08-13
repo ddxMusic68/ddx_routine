@@ -1,6 +1,7 @@
 import 'package:ddx_routine/models/routine.dart';
 import 'package:ddx_routine/models/schedule.dart';
 import 'package:ddx_routine/models/weekday.dart';
+import 'package:ddx_routine/providers/routine_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -219,6 +220,41 @@ void main() {
       expect(restored.tasks[0].id, 'i1');
       expect(restored.tasks[1].name, 'B');
       expect(restored.tasks[1].minDurationMinutes, 10);
+    });
+  });
+
+  group('completion key migration', () {
+    final routines = [
+      Routine(
+        id: 'r1',
+        name: 'M',
+        groups: [
+          TaskGroup(
+            id: 't1',
+            tasks: const [Task(id: 't1_i0', name: 'Brush')],
+          ),
+          TaskGroup(
+            id: 't2',
+            tasks: const [Task(id: 't2_i0', name: 'Floss')],
+          ),
+        ],
+      ),
+    ];
+
+    test('rewrites legacy taskId|date keys to groupId|taskId|date', () {
+      final migrated = RoutineProvider.migrateCompletionKeys(
+        routines,
+        {'t1|2026-08-12', 't2|2026-08-13'},
+      );
+      expect(migrated, {'t1|t1_i0|2026-08-12', 't2|t2_i0|2026-08-13'});
+    });
+
+    test('drops keys for unknown groups and already-new keys', () {
+      final migrated = RoutineProvider.migrateCompletionKeys(
+        routines,
+        {'ghost|2026-08-12', 't1|t1_i0|2026-08-12'},
+      );
+      expect(migrated, isEmpty);
     });
   });
 

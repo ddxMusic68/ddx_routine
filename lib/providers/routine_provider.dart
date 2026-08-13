@@ -213,6 +213,7 @@ class RoutineProvider extends ChangeNotifier {
     if (routinesRaw is! List) {
       throw const FormatException('Imported file has no "routines" list');
     }
+    final version = decoded['version'] as int? ?? 1;
     final imported = <Routine>[];
     for (final entry in routinesRaw) {
       if (entry is! Map<String, dynamic>) {
@@ -233,6 +234,9 @@ class RoutineProvider extends ChangeNotifier {
     _completedKeys
       ..clear()
       ..addAll(completions);
+    if (version < 6) {
+      _migrateCompletionKeysToTasks();
+    }
     await _save();
     notifyListeners();
   }
@@ -258,8 +262,17 @@ class RoutineProvider extends ChangeNotifier {
   int _indexOfRoutine(String id) => _routines.indexWhere((r) => r.id == id);
 
   void _migrateCompletionKeysToTasks() {
+    _completedKeys
+      ..clear()
+      ..addAll(migrateCompletionKeys(_routines, _completedKeys));
+  }
+
+  static Set<String> migrateCompletionKeys(
+    List<Routine> routines,
+    Set<String> keys,
+  ) {
     final taskIdByGroup = <String, String>{};
-    for (final routine in _routines) {
+    for (final routine in routines) {
       for (final group in routine.groups) {
         if (group.tasks.isNotEmpty) {
           taskIdByGroup[group.id] = group.tasks.first.id;
@@ -267,7 +280,7 @@ class RoutineProvider extends ChangeNotifier {
       }
     }
     final migrated = <String>{};
-    for (final key in _completedKeys) {
+    for (final key in keys) {
       final parts = key.split('|');
       if (parts.length != 2) continue;
       final groupId = parts[0];
@@ -275,9 +288,7 @@ class RoutineProvider extends ChangeNotifier {
       if (taskId == null) continue;
       migrated.add('$groupId|$taskId|${parts[1]}');
     }
-    _completedKeys
-      ..clear()
-      ..addAll(migrated);
+    return migrated;
   }
 
   static String _completionKey(String groupId, String taskId, DateTime date) =>

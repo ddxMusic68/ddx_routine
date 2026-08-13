@@ -1,6 +1,19 @@
 ## Description
 
+ddxRoutine is a routine and habit tracking app. Group recurring tasks into task groups, give each group a flexible repeating schedule, and check tasks off day by day from the Today view.
+
 ## Features
+
+- **Today view** — browse any date, check tasks off, and jump straight back to today.
+- **Flexible schedules** — daily, weekly, monthly, and yearly recurrences with custom intervals (every N days/weeks/months/years), multiple weekdays, and day-of-month or nth-weekday monthly/yearly rules (e.g. "first Sunday every 2 months").
+- **Task groups** — chain similar tasks under a single schedule.
+- **Tasks** — name, optional multi-line description (view the full text via the info button), and optional duration (min/max minutes plus an optional note).
+- **Autosave** — task and task-group editors save automatically when you leave.
+- **Routine management** — create, rename, and delete routines, reorder task groups, and collapse routines in the Today view.
+- **Export/Import** — save data to a JSON file and load it back.
+- **Dropbox sync** — sync data across devices (requires your own Dropbox app key).
+- **Themes** — system, light, and dark mode.
+- **Local storage** — data is stored next to the executable on Windows.
 
 ## Dropbox Sync Setup
 
@@ -19,13 +32,22 @@ Once connected, use **Sync Now** in settings to sync manually. Auto-sync runs on
 
 ```
 lib/
-
+  models/          Data models: Routine, TaskGroup, Task, Schedule, Weekday
+  providers/       State management (RoutineProvider, SettingsProvider)
+  screens/         App screens: Today view, home, routine detail, editors, settings
+  utils/           Storage and shared constants
+  widgets/         Reusable UI: weekday selector, stepper input, day-of-month picker
 ```
 
 ## Dependencies
 
 | Package | Purpose |
 |---|---|
+| provider | State management (ChangeNotifier) |
+| path_provider | Locate app data directory |
+| package_info_plus | App version info |
+| url_launcher | Open external links |
+| file_picker | Choose files for export/import |
 
 ## Development
 
@@ -57,18 +79,18 @@ Tests live in the `test/` directory and run with `flutter test`.
 
 ## Todo
 - [ ] add sync
-- [ ] finish readme
+- [X] finish readme
 - [X] add app icon
 - [X] fix export/import on android
 - [X] make it so you can select first sunday of the month every 2 months (better schedule system)
-- [ ] change name to ddxRoutine
+- [X] change name to ddxRoutine
 - [X] make it so you can add multiple time occurrences for example every other day and Saturday
 - [X] make it so you can chain similar routine tasks under one schedule (so linked tasks)
 - [X] make increment buttons easier to use so you don't have to keep incrementing
 - [X] add borders between tasks when editing
 - [X] rework gui to exclude every day above groups
 - [X] make tasks have an edit menu and not a big widget
-- [ ] make description collapsable
+- [X] make description collapsable
 - [ ] test full app
 
 

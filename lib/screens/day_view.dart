@@ -374,11 +374,8 @@ class _TaskRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final parts = <String>[
-      if (task.description != null && task.description!.isNotEmpty)
-        task.description!,
-      if (group.scheduleSummary != null) group.scheduleSummary!,
-    ];
+    final description = (task.description ?? '').trim();
+    final summary = group.scheduleSummary;
     return Consumer<RoutineProvider>(
       builder: (context, provider, child) {
         final completed = provider.isTaskCompleted(group.id, task.id, date);
@@ -401,10 +398,10 @@ class _TaskRow extends StatelessWidget {
                   )
                 : null,
           ),
-          subtitle: parts.isEmpty
+          subtitle: summary == null
               ? null
               : Text(
-                  parts.join(' · '),
+                  summary,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -416,7 +413,7 @@ class _TaskRow extends StatelessWidget {
             children: [
               if (task.durationLabel != null)
                 Padding(
-                  padding: const EdgeInsets.only(right: 4),
+                  padding: const EdgeInsets.only(right: 8),
                   child: Text(
                     task.durationLabel!,
                     style: theme.textTheme.labelMedium?.copyWith(
@@ -424,13 +421,28 @@ class _TaskRow extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (description.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Details',
+                  onPressed: () => _showDescription(context),
+                ),
               IconButton(
-                icon: const Icon(Icons.edit_outlined),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 tooltip: 'Edit',
                 onPressed: onOpenGroup,
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 tooltip: 'Delete',
                 onPressed: onDeleteGroup,
               ),
@@ -441,6 +453,28 @@ class _TaskRow extends StatelessWidget {
             task.id,
             date,
           ),
+        );
+      },
+    );
+  }
+
+  void _showDescription(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(task.name),
+          content: SingleChildScrollView(
+            child: SelectableText(
+              (task.description ?? '').trim(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
         );
       },
     );
