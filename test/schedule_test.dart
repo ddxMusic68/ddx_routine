@@ -398,17 +398,17 @@ void main() {
 
   group('v1 migration', () {
     test('legacy days-only task migrates to weekly interval 1', () {
-      final task = RoutineTask.fromJson({
+      final group = TaskGroup.fromJson({
         'id': 't1',
         'title': 'Legacy',
         'days': ['monday', 'friday'],
       });
-      expect(task.schedules.length, 1);
-      expect(task.schedules.single.frequency, ScheduleFrequency.weekly);
-      expect(task.schedules.single.interval, 1);
-      expect(task.schedules.single.days, {Weekday.monday, Weekday.friday});
-      expect(task.schedules.single.occursOn(d(2026, 8, 3)), isTrue);
-      expect(task.schedules.single.occursOn(d(2026, 8, 7)), isTrue);
+      expect(group.schedules.length, 1);
+      expect(group.schedules.single.frequency, ScheduleFrequency.weekly);
+      expect(group.schedules.single.interval, 1);
+      expect(group.schedules.single.days, {Weekday.monday, Weekday.friday});
+      expect(group.schedules.single.occursOn(d(2026, 8, 3)), isTrue);
+      expect(group.schedules.single.occursOn(d(2026, 8, 7)), isTrue);
     });
   });
 

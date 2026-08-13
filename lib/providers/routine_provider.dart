@@ -25,27 +25,15 @@ class RoutineProvider extends ChangeNotifier {
     return null;
   }
 
-  List<Routine> routinesWithTasksOnDate(DateTime date) => _routines
-      .where((routine) => routine.taskCountOn(date) > 0)
-      .toList();
+  bool isTaskCompleted(String groupId, String taskId, DateTime date) =>
+      _completedKeys.contains(_completionKey(groupId, taskId, date));
 
-  List<RoutineTask> tasksOnDate(DateTime date) {
-    final tasks = <RoutineTask>[];
-    for (final routine in _routines) {
-      tasks.addAll(routine.tasksOn(date));
-    }
-    return tasks;
-  }
-
-  bool isItemCompleted(String taskId, String itemId, DateTime date) =>
-      _completedKeys.contains(_completionKey(taskId, itemId, date));
-
-  Future<void> toggleItemCompleted(
+  Future<void> toggleTaskCompleted(
+    String groupId,
     String taskId,
-    String itemId,
     DateTime date,
   ) async {
-    final key = _completionKey(taskId, itemId, date);
+    final key = _completionKey(groupId, taskId, date);
     if (_completedKeys.contains(key)) {
       _completedKeys.remove(key);
     } else {
@@ -76,7 +64,7 @@ class RoutineProvider extends ChangeNotifier {
         ..addAll((json['completions'] as List<dynamic>? ?? const [])
             .cast<String>());
       if (version < 6) {
-        _migrateCompletionKeysToItems();
+        _migrateCompletionKeysToTasks();
       }
       if (version < _schemaVersion) {
         await _save();
@@ -110,8 +98,8 @@ class RoutineProvider extends ChangeNotifier {
     final removed = _routines.where((r) => r.id == id).toList();
     _routines = _routines.where((r) => r.id != id).toList();
     for (final routine in removed) {
-      for (final task in routine.tasks) {
-        _completedKeys.removeWhere((k) => k.startsWith('${task.id}|'));
+      for (final group in routine.groups) {
+        _completedKeys.removeWhere((k) => k.startsWith('${group.id}|'));
       }
     }
     await _save();
@@ -125,10 +113,10 @@ class RoutineProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<RoutineTask> addTask(
+  Future<TaskGroup> addTaskGroup(
     String routineId, {
     List<Schedule> schedules = const [],
-    List<TaskItem> items = const [],
+    List<Task> tasks = const [],
   }) async {
     for (final schedule in schedules) {
       schedule.validate();
@@ -137,25 +125,26 @@ class RoutineProvider extends ChangeNotifier {
     if (routineIndex < 0) {
       throw ArgumentError('Routine not found: $routineId');
     }
-    final task = RoutineTask(
+    final group = TaskGroup(
       id: _newId(),
       schedules: schedules,
-      items: items,
+      tasks: tasks,
     );
     final routine = _routines[routineIndex];
-    _routines[routineIndex] = routine.copyWith(tasks: [...routine.tasks, task]);
+    _routines[routineIndex] =
+        routine.copyWith(groups: [...routine.groups, group]);
     await _save();
     notifyListeners();
-    return task;
+    return group;
   }
 
-  Future<void> updateTask(
+  Future<void> updateTaskGroup(
     String routineId,
-    RoutineTask task, {
+    TaskGroup group, {
     List<Schedule>? schedules,
-    List<TaskItem>? items,
+    List<Task>? tasks,
   }) async {
-    final schedulesToValidate = schedules ?? task.schedules;
+    final schedulesToValidate = schedules ?? group.schedules;
     for (final schedule in schedulesToValidate) {
       schedule.validate();
     }
@@ -164,35 +153,35 @@ class RoutineProvider extends ChangeNotifier {
       throw ArgumentError('Routine not found: $routineId');
     }
     final routine = _routines[routineIndex];
-    final taskIndex = routine.tasks.indexWhere((t) => t.id == task.id);
-    if (taskIndex < 0) {
-      throw ArgumentError('Task not found: ${task.id}');
+    final groupIndex = routine.groups.indexWhere((g) => g.id == group.id);
+    if (groupIndex < 0) {
+      throw ArgumentError('Task group not found: ${group.id}');
     }
-    final tasks = [...routine.tasks];
-    tasks[taskIndex] = task.copyWith(
+    final groups = [...routine.groups];
+    groups[groupIndex] = group.copyWith(
       schedules: schedules,
-      items: items,
+      tasks: tasks,
     );
-    _routines[routineIndex] = routine.copyWith(tasks: tasks);
+    _routines[routineIndex] = routine.copyWith(groups: groups);
     await _save();
     notifyListeners();
   }
 
-  Future<void> removeTask(String routineId, String taskId) async {
+  Future<void> removeTaskGroup(String routineId, String groupId) async {
     final routineIndex = _indexOfRoutine(routineId);
     if (routineIndex < 0) {
       throw ArgumentError('Routine not found: $routineId');
     }
     final routine = _routines[routineIndex];
     _routines[routineIndex] = routine.copyWith(
-      tasks: routine.tasks.where((t) => t.id != taskId).toList(),
+      groups: routine.groups.where((g) => g.id != groupId).toList(),
     );
-    _completedKeys.removeWhere((k) => k.startsWith('$taskId|'));
+    _completedKeys.removeWhere((k) => k.startsWith('$groupId|'));
     await _save();
     notifyListeners();
   }
 
-  Future<void> moveTask(
+  Future<void> moveTaskGroup(
     String routineId,
     int oldIndex,
     int newIndex,
@@ -201,16 +190,16 @@ class RoutineProvider extends ChangeNotifier {
     if (routineIndex < 0) {
       throw ArgumentError('Routine not found: $routineId');
     }
-    final tasks = [..._routines[routineIndex].tasks];
+    final groups = [..._routines[routineIndex].groups];
     if (oldIndex < 0 ||
-        oldIndex >= tasks.length ||
+        oldIndex >= groups.length ||
         newIndex < 0 ||
-        newIndex >= tasks.length) {
-      throw RangeError('Invalid task index');
+        newIndex >= groups.length) {
+      throw RangeError('Invalid task group index');
     }
-    final task = tasks.removeAt(oldIndex);
-    tasks.insert(newIndex, task);
-    _routines[routineIndex] = _routines[routineIndex].copyWith(tasks: tasks);
+    final group = groups.removeAt(oldIndex);
+    groups.insert(newIndex, group);
+    _routines[routineIndex] = _routines[routineIndex].copyWith(groups: groups);
     await _save();
     notifyListeners();
   }
@@ -230,8 +219,8 @@ class RoutineProvider extends ChangeNotifier {
         throw const FormatException('Invalid routine entry in imported file');
       }
       final routine = Routine.fromJson(entry);
-      for (final task in routine.tasks) {
-        for (final schedule in task.schedules) {
+      for (final group in routine.groups) {
+        for (final schedule in group.schedules) {
           schedule.validate();
         }
       }
@@ -268,12 +257,12 @@ class RoutineProvider extends ChangeNotifier {
 
   int _indexOfRoutine(String id) => _routines.indexWhere((r) => r.id == id);
 
-  void _migrateCompletionKeysToItems() {
-    final itemIdByTask = <String, String>{};
+  void _migrateCompletionKeysToTasks() {
+    final taskIdByGroup = <String, String>{};
     for (final routine in _routines) {
-      for (final task in routine.tasks) {
-        if (task.items.isNotEmpty) {
-          itemIdByTask[task.id] = task.items.first.id;
+      for (final group in routine.groups) {
+        if (group.tasks.isNotEmpty) {
+          taskIdByGroup[group.id] = group.tasks.first.id;
         }
       }
     }
@@ -281,18 +270,18 @@ class RoutineProvider extends ChangeNotifier {
     for (final key in _completedKeys) {
       final parts = key.split('|');
       if (parts.length != 2) continue;
-      final taskId = parts[0];
-      final itemId = itemIdByTask[taskId];
-      if (itemId == null) continue;
-      migrated.add('$taskId|$itemId|${parts[1]}');
+      final groupId = parts[0];
+      final taskId = taskIdByGroup[groupId];
+      if (taskId == null) continue;
+      migrated.add('$groupId|$taskId|${parts[1]}');
     }
     _completedKeys
       ..clear()
       ..addAll(migrated);
   }
 
-  static String _completionKey(String taskId, String itemId, DateTime date) =>
-      '$taskId|$itemId|${_dateString(date)}';
+  static String _completionKey(String groupId, String taskId, DateTime date) =>
+      '$groupId|$taskId|${_dateString(date)}';
 
   static String _dateString(DateTime d) {
     final y = d.year.toString().padLeft(4, '0');

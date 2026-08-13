@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/routine.dart';
 import '../providers/routine_provider.dart';
-import '../widgets/task_tile.dart';
-import 'task_editor_screen.dart';
+import 'task_group_editor_screen.dart';
 
 class DayView extends StatefulWidget {
   const DayView({super.key});
@@ -100,7 +99,9 @@ class _DayViewState extends State<DayView> {
         Expanded(
           child: Consumer<RoutineProvider>(
             builder: (context, provider, child) {
-              final routines = provider.routinesWithTasksOnDate(_selectedDate);
+              final routines = provider.routines
+                  .where((routine) => routine.groupCountOn(_selectedDate) > 0)
+                  .toList();
               if (routines.isEmpty) {
                 return _EmptyDayView(date: _selectedDate);
               }
@@ -109,15 +110,15 @@ class _DayViewState extends State<DayView> {
                 itemCount: routines.length,
                 itemBuilder: (context, index) {
                   final routine = routines[index];
-                  final tasks = routine.tasksOn(_selectedDate);
-                  final items = [for (final task in tasks) ...task.items];
-                  final minMinutes = items.fold<int>(
+                  final groups = routine.groupsOn(_selectedDate);
+                  final tasks = [for (final group in groups) ...group.tasks];
+                  final minMinutes = tasks.fold<int>(
                     0,
-                    (sum, item) => sum + item.minDurationMinutes,
+                    (sum, task) => sum + task.minDurationMinutes,
                   );
-                  final maxMinutes = items.fold<int>(
+                  final maxMinutes = tasks.fold<int>(
                     0,
-                    (sum, item) => sum + item.maxDurationMinutes,
+                    (sum, task) => sum + task.maxDurationMinutes,
                   );
                   final String? durationRange = maxMinutes <= 0
                       ? null
@@ -127,62 +128,36 @@ class _DayViewState extends State<DayView> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      InkWell(
-                        onTap: () => _toggleRoutine(routine.id),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _collapsedRoutineIds.contains(routine.id)
-                                    ? Icons.expand_more
-                                    : Icons.expand_less,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  routine.name,
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium,
-                                ),
-                              ),
-                              if (durationRange != null)
-                                Text(
-                                  durationRange,
-                                  style:
-                                      Theme.of(context).textTheme.labelMedium,
-                                ),
-                            ],
-                          ),
-                        ),
+                      _RoutineHeader(
+                        routine: routine,
+                        durationRange: durationRange,
+                        collapsed: _collapsedRoutineIds.contains(routine.id),
+                        onToggle: () => _toggleRoutine(routine.id),
+                        onEdit: () =>
+                            _renameRoutine(context, provider, routine),
+                        onDelete: () =>
+                            _deleteRoutine(context, provider, routine),
                       ),
                       if (!_collapsedRoutineIds.contains(routine.id))
-                        for (final task in tasks)
-                          TaskTile(
-                            task: task,
-                            isCompleted: (item) => provider.isItemCompleted(
-                              task.id,
-                              item.id,
-                              _selectedDate,
+                        for (final group in groups)
+                          for (final task in group.tasks)
+                            _TaskRow(
+                              routineId: routine.id,
+                              group: group,
+                              task: task,
+                              date: _selectedDate,
+                              onOpenGroup: () => _openEditor(
+                                context,
+                                provider,
+                                routine,
+                                group,
+                              ),
+                              onDeleteGroup: () => provider.removeTaskGroup(
+                                routine.id,
+                                group.id,
+                              ),
                             ),
-                            onToggleCompleted: (item) =>
-                                provider.toggleItemCompleted(
-                              task.id,
-                              item.id,
-                              _selectedDate,
-                            ),
-                            onEdit: () => _openEditor(
-                              context,
-                              provider,
-                              routine,
-                              task,
-                            ),
-                            onDelete: () =>
-                                provider.removeTask(routine.id, task.id),
-                          ),
+                      const Divider(height: 1),
                     ],
                   );
                 },
@@ -212,16 +187,88 @@ class _DayViewState extends State<DayView> {
     BuildContext context,
     RoutineProvider provider,
     Routine routine,
-    RoutineTask task,
+    TaskGroup group,
   ) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TaskEditorScreen(
+        builder: (_) => TaskGroupEditorScreen(
           routineId: routine.id,
-          task: task,
+          group: group,
         ),
       ),
+    );
+  }
+
+  Future<void> _renameRoutine(
+    BuildContext context,
+    RoutineProvider provider,
+    Routine routine,
+  ) async {
+    final name = await _promptForName(context, initial: routine.name);
+    if (name == null || name.trim().isEmpty) return;
+    await provider.renameRoutine(routine.id, name.trim());
+  }
+
+  Future<void> _deleteRoutine(
+    BuildContext context,
+    RoutineProvider provider,
+    Routine routine,
+  ) async {
+    final confirmed = await _confirmDelete(context, routine.name);
+    if (confirmed == true) {
+      await provider.deleteRoutine(routine.id);
+    }
+  }
+
+  Future<bool?> _confirmDelete(BuildContext context, String name) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete routine?'),
+          content: Text('"$name" and all of its task groups will be removed.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<String?> _promptForName(BuildContext context, {String? initial}) {
+    final controller = TextEditingController(text: initial ?? '');
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Rename Routine'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(labelText: 'Name'),
+            onSubmitted: (value) => Navigator.pop(context, value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -236,6 +283,154 @@ class _DayViewState extends State<DayView> {
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
   ];
+}
+
+class _RoutineHeader extends StatelessWidget {
+  final Routine routine;
+  final String? durationRange;
+  final bool collapsed;
+  final VoidCallback onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _RoutineHeader({
+    required this.routine,
+    required this.durationRange,
+    required this.collapsed,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onToggle,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+        child: Row(
+          children: [
+            Icon(
+              collapsed ? Icons.expand_more : Icons.expand_less,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                routine.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            if (durationRange != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  durationRange!,
+                  style: theme.textTheme.labelMedium,
+                ),
+              ),
+            PopupMenuButton<String>(
+              tooltip: 'Routine options',
+              onSelected: (value) {
+                switch (value) {
+                  case 'edit':
+                    onEdit();
+                  case 'delete':
+                    onDelete();
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'edit', child: Text('Edit')),
+                PopupMenuItem(value: 'delete', child: Text('Delete')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskRow extends StatelessWidget {
+  final String routineId;
+  final TaskGroup group;
+  final Task task;
+  final DateTime date;
+  final VoidCallback onOpenGroup;
+  final VoidCallback onDeleteGroup;
+
+  const _TaskRow({
+    required this.routineId,
+    required this.group,
+    required this.task,
+    required this.date,
+    required this.onOpenGroup,
+    required this.onDeleteGroup,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final parts = <String>[
+      if (task.description != null && task.description!.isNotEmpty)
+        task.description!,
+      if (task.durationLabel != null) task.durationLabel!,
+    ];
+    return Consumer<RoutineProvider>(
+      builder: (context, provider, child) {
+        final completed = provider.isTaskCompleted(group.id, task.id, date);
+        return ListTile(
+          dense: true,
+          leading: Checkbox(
+            value: completed,
+            onChanged: (_) => provider.toggleTaskCompleted(
+              group.id,
+              task.id,
+              date,
+            ),
+          ),
+          title: Text(
+            task.name,
+            style: completed
+                ? TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    decoration: TextDecoration.lineThrough,
+                  )
+                : null,
+          ),
+          subtitle: parts.isEmpty
+              ? null
+              : Text(
+                  parts.join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Edit',
+                onPressed: onOpenGroup,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete',
+                onPressed: onDeleteGroup,
+              ),
+            ],
+          ),
+          onTap: onOpenGroup,
+        );
+      },
+    );
+  }
 }
 
 class _EmptyDayView extends StatelessWidget {

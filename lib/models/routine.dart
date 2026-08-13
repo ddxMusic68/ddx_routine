@@ -1,7 +1,7 @@
 import 'schedule.dart';
 import 'weekday.dart';
 
-class TaskItem {
+class Task {
   final String id;
   final String name;
   final String? description;
@@ -9,7 +9,7 @@ class TaskItem {
   final int maxDurationMinutes;
   final String? durationNote;
 
-  const TaskItem({
+  const Task({
     required this.id,
     required this.name,
     this.description,
@@ -32,14 +32,14 @@ class TaskItem {
     return '$base · $note';
   }
 
-  TaskItem copyWith({
+  Task copyWith({
     String? name,
     String? description,
     int? minDurationMinutes,
     int? maxDurationMinutes,
     String? durationNote,
   }) {
-    return TaskItem(
+    return Task(
       id: id,
       name: name ?? this.name,
       description: description ?? this.description,
@@ -51,8 +51,8 @@ class TaskItem {
     );
   }
 
-  factory TaskItem.fromJson(Map<String, dynamic> json) {
-    return TaskItem(
+  factory Task.fromJson(Map<String, dynamic> json) {
+    return Task(
       id: json['id'] as String,
       name: json['name'] as String,
       description: json['description'] as String?,
@@ -78,15 +78,15 @@ class TaskItem {
   }
 }
 
-class RoutineTask {
+class TaskGroup {
   final String id;
   final List<Schedule> schedules;
-  final List<TaskItem> items;
+  final List<Task> tasks;
 
-  const RoutineTask({
+  const TaskGroup({
     required this.id,
     this.schedules = const [],
-    this.items = const [],
+    this.tasks = const [],
   });
 
   bool occursOn(DateTime date) =>
@@ -98,18 +98,18 @@ class RoutineTask {
     return summaries.join(' · ');
   }
 
-  RoutineTask copyWith({
+  TaskGroup copyWith({
     List<Schedule>? schedules,
-    List<TaskItem>? items,
+    List<Task>? tasks,
   }) {
-    return RoutineTask(
+    return TaskGroup(
       id: id,
       schedules: schedules ?? this.schedules,
-      items: items ?? this.items,
+      tasks: tasks ?? this.tasks,
     );
   }
 
-  factory RoutineTask.fromJson(Map<String, dynamic> json) {
+  factory TaskGroup.fromJson(Map<String, dynamic> json) {
     final schedulesRaw = json['schedules'];
     List<Schedule> schedules;
     if (schedulesRaw is List) {
@@ -135,14 +135,14 @@ class RoutineTask {
     }
 
     final itemsRaw = json['items'];
-    List<TaskItem> items;
+    List<Task> tasks;
     if (itemsRaw is List) {
-      items = itemsRaw
-          .map((e) => TaskItem.fromJson(e as Map<String, dynamic>))
+      tasks = itemsRaw
+          .map((e) => Task.fromJson(e as Map<String, dynamic>))
           .toList();
     } else {
-      items = [
-        TaskItem(
+      tasks = [
+        Task(
           id: '${json['id']}_i0',
           name: json['title'] as String? ?? '',
           description: json['description'] as String?,
@@ -157,10 +157,10 @@ class RoutineTask {
       ];
     }
 
-    return RoutineTask(
+    return TaskGroup(
       id: json['id'] as String,
       schedules: schedules,
-      items: items,
+      tasks: tasks,
     );
   }
 
@@ -168,7 +168,7 @@ class RoutineTask {
     return {
       'id': id,
       'schedules': schedules.map((s) => s.toJson()).toList(),
-      'items': items.map((i) => i.toJson()).toList(),
+      'items': tasks.map((t) => t.toJson()).toList(),
     };
   }
 }
@@ -176,32 +176,32 @@ class RoutineTask {
 class Routine {
   final String id;
   final String name;
-  final List<RoutineTask> tasks;
+  final List<TaskGroup> groups;
 
   const Routine({
     required this.id,
     required this.name,
-    this.tasks = const [],
+    this.groups = const [],
   });
 
-  int get totalDurationMinutes => allItems().fold(
-      0, (sum, item) => sum + item.maxDurationMinutes);
+  int get totalDurationMinutes => allTasks().fold(
+      0, (sum, task) => sum + task.maxDurationMinutes);
 
-  int get taskCount => tasks.length;
+  int get groupCount => groups.length;
 
-  List<TaskItem> allItems() =>
-      [for (final task in tasks) ...task.items];
+  List<Task> allTasks() =>
+      [for (final group in groups) ...group.tasks];
 
-  int taskCountOn(DateTime date) => tasksOn(date).length;
+  int groupCountOn(DateTime date) => groupsOn(date).length;
 
-  List<RoutineTask> tasksOn(DateTime date) =>
-      tasks.where((task) => task.occursOn(date)).toList();
+  List<TaskGroup> groupsOn(DateTime date) =>
+      groups.where((group) => group.occursOn(date)).toList();
 
-  Routine copyWith({String? name, List<RoutineTask>? tasks}) {
+  Routine copyWith({String? name, List<TaskGroup>? groups}) {
     return Routine(
       id: id,
       name: name ?? this.name,
-      tasks: tasks ?? this.tasks,
+      groups: groups ?? this.groups,
     );
   }
 
@@ -209,8 +209,8 @@ class Routine {
     return Routine(
       id: json['id'] as String,
       name: json['name'] as String,
-      tasks: (json['tasks'] as List<dynamic>? ?? const [])
-          .map((e) => RoutineTask.fromJson(e as Map<String, dynamic>))
+      groups: (json['tasks'] as List<dynamic>? ?? const [])
+          .map((e) => TaskGroup.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }
@@ -219,7 +219,7 @@ class Routine {
     return {
       'id': id,
       'name': name,
-      'tasks': tasks.map((t) => t.toJson()).toList(),
+      'tasks': groups.map((t) => t.toJson()).toList(),
     };
   }
 }

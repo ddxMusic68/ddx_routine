@@ -4,8 +4,8 @@ import 'package:ddx_routine/models/weekday.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  RoutineTask task(String id, Set<Weekday> days, {String itemName = 'X'}) {
-    return RoutineTask(
+  TaskGroup makeGroup(String id, Set<Weekday> days, {String taskName = 'X'}) {
+    return TaskGroup(
       id: id,
       schedules: [
         Schedule(
@@ -13,48 +13,49 @@ void main() {
           days: days,
         ),
       ],
-      items: [TaskItem(id: '${id}_i0', name: itemName)],
+      tasks: [Task(id: '${id}_i0', name: taskName)],
     );
   }
 
-  group('Routine.tasksOn order', () {
+  group('Routine.groupsOn order', () {
     final routine = Routine(
       id: 'r1',
       name: 'Morning',
-      tasks: [
-        task('a', {Weekday.monday}),
-        task('b', {Weekday.monday}),
-        task('c', {Weekday.tuesday}),
-        task('d', {Weekday.monday}),
+      groups: [
+        makeGroup('a', {Weekday.monday}),
+        makeGroup('b', {Weekday.monday}),
+        makeGroup('c', {Weekday.tuesday}),
+        makeGroup('d', {Weekday.monday}),
       ],
     );
 
-    test('preserves saved task order for a given date', () {
+    test('preserves saved group order for a given date', () {
       final monday = DateTime(2026, 8, 3);
       expect(
-        routine.tasksOn(monday).map((t) => t.id).toList(),
+        routine.groupsOn(monday).map((g) => g.id).toList(),
         ['a', 'b', 'd'],
       );
     });
 
-    test('reflects a reordered task list', () {
-      final reordered = routine.copyWith(tasks: routine.tasks.reversed.toList());
+    test('reflects a reordered group list', () {
+      final reordered =
+          routine.copyWith(groups: routine.groups.reversed.toList());
 
       final monday = DateTime(2026, 8, 3);
       expect(
-        reordered.tasksOn(monday).map((t) => t.id).toList(),
+        reordered.groupsOn(monday).map((g) => g.id).toList(),
         ['d', 'b', 'a'],
       );
     });
   });
 
-  group('TaskItem.durationLabel', () {
-    TaskItem make({
+  group('Task.durationLabel', () {
+    Task make({
       int min = 0,
       int max = 0,
       String? note,
     }) {
-      return TaskItem(
+      return Task(
         id: 'i',
         name: 'T',
         minDurationMinutes: min,
@@ -92,9 +93,9 @@ void main() {
     });
   });
 
-  group('TaskItem JSON', () {
+  group('Task JSON', () {
     test('round-trips name, description, and durations', () {
-      final item = TaskItem(
+      final task = Task(
         id: 'i1',
         name: 'Gym',
         description: 'light day',
@@ -102,7 +103,7 @@ void main() {
         maxDurationMinutes: 45,
         durationNote: 'optional',
       );
-      final restored = TaskItem.fromJson(item.toJson());
+      final restored = Task.fromJson(task.toJson());
       expect(restored.id, 'i1');
       expect(restored.name, 'Gym');
       expect(restored.description, 'light day');
@@ -112,7 +113,7 @@ void main() {
     });
 
     test('maps a legacy durationMinutes to min and max', () {
-      final restored = TaskItem.fromJson({
+      final restored = Task.fromJson({
         'id': 'i1',
         'name': 'Gym',
         'durationMinutes': 30,
@@ -123,8 +124,8 @@ void main() {
     });
   });
 
-  group('RoutineTask schedules', () {
-    final task = RoutineTask(
+  group('TaskGroup schedules', () {
+    final taskGroup = TaskGroup(
       id: 't1',
       schedules: [
         Schedule(
@@ -137,36 +138,36 @@ void main() {
           days: {Weekday.saturday},
         ),
       ],
-      items: const [TaskItem(id: 'i1', name: 'Stretch')],
+      tasks: const [Task(id: 'i1', name: 'Stretch')],
     );
 
     test('occursOn is true when any schedule matches', () {
-      expect(task.occursOn(DateTime(2026, 8, 8)), isTrue); // Saturday rule
-      expect(task.occursOn(DateTime(2026, 8, 10)), isTrue); // every-other-day
-      expect(task.occursOn(DateTime(2026, 8, 12)), isTrue); // every-other-day
-      expect(task.occursOn(DateTime(2026, 8, 15)), isTrue); // Saturday rule
-      expect(task.occursOn(DateTime(2026, 8, 9)), isFalse);
-      expect(task.occursOn(DateTime(2026, 8, 11)), isFalse);
+      expect(taskGroup.occursOn(DateTime(2026, 8, 8)), isTrue); // Saturday rule
+      expect(taskGroup.occursOn(DateTime(2026, 8, 10)), isTrue); // every-other-day
+      expect(taskGroup.occursOn(DateTime(2026, 8, 12)), isTrue); // every-other-day
+      expect(taskGroup.occursOn(DateTime(2026, 8, 15)), isTrue); // Saturday rule
+      expect(taskGroup.occursOn(DateTime(2026, 8, 9)), isFalse);
+      expect(taskGroup.occursOn(DateTime(2026, 8, 11)), isFalse);
     });
 
     test('scheduleSummary joins all schedule summaries', () {
-      expect(task.scheduleSummary, 'Every 2 days · Sat');
+      expect(taskGroup.scheduleSummary, 'Every 2 days · Sat');
     });
 
-    test('JSON round-trips schedules and items', () {
-      final restored = RoutineTask.fromJson(task.toJson());
+    test('JSON round-trips schedules and tasks', () {
+      final restored = TaskGroup.fromJson(taskGroup.toJson());
       expect(restored.schedules.length, 2);
       expect(restored.schedules[0].frequency, ScheduleFrequency.daily);
       expect(restored.schedules[1].frequency, ScheduleFrequency.weekly);
-      expect(restored.items.single.id, 'i1');
-      expect(restored.items.single.name, 'Stretch');
+      expect(restored.tasks.single.id, 'i1');
+      expect(restored.tasks.single.name, 'Stretch');
       expect(restored.occursOn(DateTime(2026, 8, 8)), isTrue);
       expect(restored.occursOn(DateTime(2026, 8, 12)), isTrue);
-      expect((task.toJson()['schedules'] as List).length, 2);
+      expect((taskGroup.toJson()['schedules'] as List).length, 2);
     });
 
     test('legacy single-schedule JSON loads as one schedule', () {
-      final restored = RoutineTask.fromJson({
+      final restored = TaskGroup.fromJson({
         'id': 't1',
         'title': 'T',
         'schedule': {'frequency': 'daily'},
@@ -178,8 +179,8 @@ void main() {
   });
 
   group('v6 migration', () {
-    test('legacy title task migrates to a single item', () {
-      final restored = RoutineTask.fromJson({
+    test('legacy title task migrates to a single task', () {
+      final restored = TaskGroup.fromJson({
         'id': 't1',
         'title': 'Brush teeth',
         'description': 'two minutes',
@@ -188,19 +189,19 @@ void main() {
         'schedule': {'frequency': 'daily'},
       });
 
-      expect(restored.items.length, 1);
-      final item = restored.items.single;
-      expect(item.id, 't1_i0');
-      expect(item.name, 'Brush teeth');
-      expect(item.description, 'two minutes');
-      expect(item.minDurationMinutes, 2);
-      expect(item.maxDurationMinutes, 2);
-      expect(item.durationNote, 'after breakfast');
+      expect(restored.tasks.length, 1);
+      final task = restored.tasks.single;
+      expect(task.id, 't1_i0');
+      expect(task.name, 'Brush teeth');
+      expect(task.description, 'two minutes');
+      expect(task.minDurationMinutes, 2);
+      expect(task.maxDurationMinutes, 2);
+      expect(task.durationNote, 'after breakfast');
       expect(restored.schedules.single.frequency, ScheduleFrequency.daily);
     });
 
-    test('new-format tasks keep their items untouched', () {
-      final task = RoutineTask(
+    test('new-format task groups keep their tasks untouched', () {
+      final taskGroup = TaskGroup(
         id: 't1',
         schedules: [
           Schedule(
@@ -208,41 +209,41 @@ void main() {
             days: {Weekday.monday},
           ),
         ],
-        items: const [
-          TaskItem(id: 'i1', name: 'A'),
-          TaskItem(id: 'i2', name: 'B', minDurationMinutes: 10),
+        tasks: const [
+          Task(id: 'i1', name: 'A'),
+          Task(id: 'i2', name: 'B', minDurationMinutes: 10),
         ],
       );
-      final restored = RoutineTask.fromJson(task.toJson());
-      expect(restored.items.length, 2);
-      expect(restored.items[0].id, 'i1');
-      expect(restored.items[1].name, 'B');
-      expect(restored.items[1].minDurationMinutes, 10);
+      final restored = TaskGroup.fromJson(taskGroup.toJson());
+      expect(restored.tasks.length, 2);
+      expect(restored.tasks[0].id, 'i1');
+      expect(restored.tasks[1].name, 'B');
+      expect(restored.tasks[1].minDurationMinutes, 10);
     });
   });
 
   group('Routine totals', () {
-    test('totalDurationMinutes sums all item max durations', () {
+    test('totalDurationMinutes sums all task max durations', () {
       final routine = Routine(
         id: 'r1',
         name: 'M',
-        tasks: [
-          RoutineTask(
+        groups: [
+          TaskGroup(
             id: 'a',
-            items: const [
-              TaskItem(id: 'a1', name: 'A', maxDurationMinutes: 10),
-              TaskItem(id: 'a2', name: 'B', maxDurationMinutes: 20),
+            tasks: const [
+              Task(id: 'a1', name: 'A', maxDurationMinutes: 10),
+              Task(id: 'a2', name: 'B', maxDurationMinutes: 20),
             ],
           ),
-          RoutineTask(
+          TaskGroup(
             id: 'b',
-            items: const [
-              TaskItem(id: 'b1', name: 'C', maxDurationMinutes: 5),
+            tasks: const [
+              Task(id: 'b1', name: 'C', maxDurationMinutes: 5),
             ],
           ),
         ],
       );
-      expect(routine.allItems().length, 3);
+      expect(routine.allTasks().length, 3);
       expect(routine.totalDurationMinutes, 35);
     });
   });

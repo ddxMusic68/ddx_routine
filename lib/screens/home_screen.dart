@@ -81,8 +81,8 @@ class _AppDrawer extends StatelessWidget {
                     leading: const Icon(Icons.event_repeat),
                     title: Text(routine.name),
                     subtitle: Text(
-                      '${routine.taskCount} '
-                      '${routine.taskCount == 1 ? 'task' : 'tasks'}',
+                      '${routine.groupCount} '
+                      '${routine.groupCount == 1 ? 'task group' : 'task groups'}',
                     ),
                     trailing: PopupMenuButton<String>(
                       tooltip: 'Routine options',
@@ -178,7 +178,7 @@ class _AppDrawer extends StatelessWidget {
       builder: (context) {
         return AlertDialog(
           title: const Text('Delete routine?'),
-          content: Text('"$name" and all of its tasks will be removed.'),
+          content: Text('"$name" and all of its task groups will be removed.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
