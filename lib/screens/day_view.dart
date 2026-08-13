@@ -377,7 +377,7 @@ class _TaskRow extends StatelessWidget {
     final parts = <String>[
       if (task.description != null && task.description!.isNotEmpty)
         task.description!,
-      if (task.durationLabel != null) task.durationLabel!,
+      if (group.scheduleSummary != null) group.scheduleSummary!,
     ];
     return Consumer<RoutineProvider>(
       builder: (context, provider, child) {
@@ -414,6 +414,16 @@ class _TaskRow extends StatelessWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (task.durationLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    task.durationLabel!,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: 'Edit',
