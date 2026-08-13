@@ -12,7 +12,6 @@ class TaskEditorScreen extends StatefulWidget {
 }
 
 class _TaskEditorScreenState extends State<TaskEditorScreen> {
-  final _formKey = GlobalKey<FormState>();
   late TaskDraft _draft;
 
   @override
@@ -27,32 +26,28 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     super.dispose();
   }
 
-  void _save() {
-    FocusManager.instance.primaryFocus?.unfocus();
-    if (!_formKey.currentState!.validate()) return;
-    Navigator.pop(context, TaskDraft.fromDraft(_draft));
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Edit Task')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        FocusManager.instance.primaryFocus?.unfocus();
+        Navigator.pop(context, TaskDraft.fromDraft(_draft));
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Edit Task')),
+        body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextFormField(
+            TextField(
               controller: _draft.name,
               decoration: const InputDecoration(labelText: 'Name'),
               textInputAction: TextInputAction.next,
               autofocus: true,
-              validator: (value) => (value == null || value.trim().isEmpty)
-                  ? 'Enter a name'
-                  : null,
             ),
             const SizedBox(height: 8),
-            TextFormField(
+            TextField(
               controller: _draft.description,
               decoration: const InputDecoration(
                 labelText: 'Description (optional)',
@@ -76,7 +71,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
               onChanged: (value) => setState(() => _draft.maxDuration = value),
             ),
             const SizedBox(height: 8),
-            TextFormField(
+            TextField(
               controller: _draft.durationNote,
               decoration: const InputDecoration(
                 labelText: 'Duration note (optional)',
@@ -84,11 +79,6 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _save,
-        icon: const Icon(Icons.check),
-        label: const Text('Save'),
       ),
     );
   }

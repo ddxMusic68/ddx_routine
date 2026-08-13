@@ -26,12 +26,10 @@ class TaskGroupEditorScreen extends StatefulWidget {
 }
 
 class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
-  final _formKey = GlobalKey<FormState>();
-
   late List<TaskDraft> _taskDrafts;
   late List<_ScheduleDraft> _drafts;
   int? _expandedIndex;
-  String? _tasksError;
+  bool _dirty = false;
 
   bool get _isEditing => widget.group != null;
 
@@ -58,13 +56,17 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Task Group' : 'New Task Group'),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _saveAndExit();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_isEditing ? 'Edit Task Group' : 'New Task Group'),
+        ),
+        body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             Text('Tasks', style: Theme.of(context).textTheme.titleMedium),
@@ -76,25 +78,12 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Add task'),
             ),
-            if (_tasksError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _tasksError!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
             const SizedBox(height: 24),
             Text('Repeats', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             _buildScheduleCards(),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _save,
-        icon: const Icon(Icons.check),
-        label: Text(_isEditing ? 'Save' : 'Add'),
       ),
     );
   }
@@ -134,7 +123,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
               tooltip: 'Remove task',
               onPressed: () => setState(() {
                 _taskDrafts.removeAt(index);
-                _tasksError = null;
+                _dirty = true;
               }),
             ),
           ],
@@ -170,7 +159,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
       draft.durationNote.text = result.durationNote.text;
       draft.minDuration = result.minDuration;
       draft.maxDuration = result.maxDuration;
-      _tasksError = null;
+      _dirty = true;
     });
     result.dispose();
   }
@@ -185,7 +174,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
     if (result == null || !mounted) return;
     setState(() {
       _taskDrafts.add(result);
-      _tasksError = null;
+      _dirty = true;
     });
   }
 
@@ -251,6 +240,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
                 setState(() {
                   draft.frequency = value;
                   draft.error = null;
+                  _dirty = true;
                 });
               }
             },
@@ -302,6 +292,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
     setState(() {
       draft.error = null;
       _expandedIndex = null;
+      _dirty = true;
     });
   }
 
@@ -309,6 +300,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
     if (_drafts.length <= 1) return;
     setState(() {
       _drafts.removeAt(index);
+      _dirty = true;
       final expanded = _expandedIndex;
       if (expanded == null) return;
       if (expanded == index) {
@@ -323,6 +315,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
     setState(() {
       _drafts.add(_ScheduleDraft());
       _expandedIndex = _drafts.length - 1;
+      _dirty = true;
     });
   }
 
@@ -337,7 +330,10 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
               value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => draft.interval = value),
+              onChanged: (value) => setState(() {
+                draft.interval = value;
+                _dirty = true;
+              }),
             ),
           ],
         );
@@ -351,6 +347,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
                 setState(() {
                   draft.selectedDays = days;
                   draft.error = null;
+                  _dirty = true;
                 });
               },
             ),
@@ -360,7 +357,10 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
               value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => draft.interval = value),
+              onChanged: (value) => setState(() {
+                draft.interval = value;
+                _dirty = true;
+              }),
             ),
           ],
         );
@@ -377,7 +377,10 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
               value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => draft.interval = value),
+              onChanged: (value) => setState(() {
+                draft.interval = value;
+                _dirty = true;
+              }),
             ),
           ],
         );
@@ -400,6 +403,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
                   setState(() {
                     draft.month = value;
                     draft.error = null;
+                    _dirty = true;
                   });
                 }
               },
@@ -414,7 +418,10 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
               value: draft.interval,
               min: 1,
               max: 12,
-              onChanged: (value) => setState(() => draft.interval = value),
+              onChanged: (value) => setState(() {
+                draft.interval = value;
+                _dirty = true;
+              }),
             ),
           ],
         );
@@ -439,6 +446,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
             draft.dayOfMonth ??= DateTime.now().day;
           }
           draft.error = null;
+          _dirty = true;
         });
       },
     );
@@ -452,6 +460,7 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
           setState(() {
             draft.dayOfMonth = day;
             draft.error = null;
+            _dirty = true;
           });
         },
       );
@@ -463,25 +472,25 @@ class _TaskGroupEditorScreenState extends State<TaskGroupEditorScreen> {
         setState(() {
           draft.weekdayOrdinal = value;
           draft.error = null;
+          _dirty = true;
         });
       },
       onWeekdayChanged: (value) {
         setState(() {
           draft.weekdayOfMonth = value;
           draft.error = null;
+          _dirty = true;
         });
       },
     );
   }
 
-  Future<void> _save() async {
+  Future<void> _saveAndExit() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    if (!_formKey.currentState!.validate()) return;
-    if (_taskDrafts.isEmpty) {
-      setState(() => _tasksError = 'Add at least one task.');
+    if (!_isEditing && !_dirty) {
+      if (mounted) Navigator.pop(context);
       return;
     }
-    setState(() => _tasksError = null);
 
     final schedules = <Schedule>[];
     for (var i = 0; i < _drafts.length; i++) {
