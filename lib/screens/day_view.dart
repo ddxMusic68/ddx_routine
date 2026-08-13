@@ -436,7 +436,11 @@ class _TaskRow extends StatelessWidget {
               ),
             ],
           ),
-          onTap: onOpenGroup,
+          onTap: () => provider.toggleTaskCompleted(
+            group.id,
+            task.id,
+            date,
+          ),
         );
       },
     );
